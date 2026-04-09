@@ -110,7 +110,7 @@ window.onload = function () {
 
   const hands = new Hands({
     locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
   });
 
   hands.setOptions({
@@ -139,7 +139,7 @@ window.onload = function () {
 
   const faceMesh = new FaceMesh({
     locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
   });
 
   faceMesh.setOptions({
