@@ -89,11 +89,42 @@
       color: #555;
       text-decoration: none;
     }
+
+    .camera-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .camera-controls label {
+      color: #aaa;
+    }
+
+    .camera-controls select {
+      background: #222;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 0.25rem 0.5rem;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+
+    .camera-controls select:focus {
+      outline: none;
+      border-color: #666;
+    }
   </style>
 </head>
 <body>
   <h1>Demo 2 — Face Mesh</h1>
   <p class="subtitle">MediaPipe FaceMesh • Up to 478 real-time facial landmarks from your webcam</p>
+  <div id="cameraSelectWrapper" style="display:none;" class="camera-controls">
+    <label for="cameraSelect">Camera:</label>
+    <select id="cameraSelect"></select>
+  </div>
   <div class="media-container">
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
