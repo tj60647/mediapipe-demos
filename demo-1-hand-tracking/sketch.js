@@ -116,7 +116,7 @@ window.onload = function () {
   // MediaPipe where to find its WebAssembly and model binary files.
   const hands = new Hands({
     locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
   });
 
   hands.setOptions({
