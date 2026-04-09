@@ -103,7 +103,7 @@ window.onload = function () {
 
   const video  = document.getElementById("video");
   const canvas = document.getElementById("canvas");
-  const ctx    = canvas.getContext("2d");
+  const ctx    = canvas.getContext("2d", { alpha: false });
 
   if (!video || !canvas) {
     console.error("Error: Could not find #video or #canvas in the DOM.");
@@ -142,8 +142,6 @@ window.onload = function () {
       // No hands in this frame — clear stored results.
       handResults = [];
     }
-    // Redraw the canvas whenever new results arrive.
-    drawFrame();
   });
 
   if (debugMode) {
@@ -205,6 +203,18 @@ window.onload = function () {
 
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
+    requestAnimationFrame(renderLoop);
+  }
+
+  /**
+   * renderLoop — redraws the canvas at the display's refresh rate (~60 fps),
+   * independent of the inference rate. The video feed stays smooth even when
+   * the ML model runs slower than 60 fps.
+   */
+  function renderLoop() {
+    if (!frameLoopActive) return;
+    drawFrame();
+    requestAnimationFrame(renderLoop);
   }
 
   /**
@@ -310,14 +320,14 @@ window.onload = function () {
     ctx.strokeStyle = SKELETON_COLOR;
     ctx.lineWidth   = 2;
 
+    ctx.beginPath();
     HAND_CONNECTIONS.forEach(([a, b]) => {
       const ptA = landmarks[a];
       const ptB = landmarks[b];
-      ctx.beginPath();
       ctx.moveTo(ptA.x * w, ptA.y * h);
       ctx.lineTo(ptB.x * w, ptB.y * h);
-      ctx.stroke();
     });
+    ctx.stroke();
   }
 
   /**
@@ -330,15 +340,14 @@ window.onload = function () {
   function drawLandmarks(landmarks, w, h) {
     ctx.fillStyle = LANDMARK_COLOR;
 
+    ctx.beginPath();
     landmarks.forEach((point) => {
-      ctx.beginPath();
-      ctx.arc(
-        point.x * w,
-        point.y * h,
-        DOT_RADIUS, 0, Math.PI * 2
-      );
-      ctx.fill();
+      const cx = point.x * w;
+      const cy = point.y * h;
+      ctx.moveTo(cx + DOT_RADIUS, cy);
+      ctx.arc(cx, cy, DOT_RADIUS, 0, Math.PI * 2);
     });
+    ctx.fill();
   }
 
   /**
