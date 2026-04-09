@@ -255,11 +255,10 @@ window.onload = function () {
   }
 
   // Start with the default camera, then enumerate devices for the selector.
-  // Enumerating after getUserMedia ensures the browser has granted permission
-  // and will return human-readable device labels.
+  // Enumerate regardless of whether the initial stream succeeded so that
+  // users can try a different camera if the default one failed.
   startCamera().then(() => {
-    if (!currentStream) return;
-    const track    = currentStream.getVideoTracks()[0];
+    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
     const activeId = track ? track.getSettings().deviceId : "";
     populateCameraSelect(activeId);
   });
