@@ -187,16 +187,26 @@ window.onload = function () {
   /**
    * drawFrame — clears the canvas and redraws the webcam feed plus any
    * detected hand landmarks and skeleton connections.
+   *
+   * Uses video.videoWidth/Height directly so drawing is correct even if
+   * the loadedmetadata event fires after the first onResults callback.
    */
   function drawFrame() {
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+
+    // Keep canvas dimensions in sync with the live video size.
+    if (canvas.width !== w)  canvas.width  = w;
+    if (canvas.height !== h) canvas.height = h;
+
     // Clear and redraw the webcam image as the background.
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(video, 0, 0, w, h);
 
     // Draw each detected hand.
     handResults.forEach((landmarks, handIndex) => {
-      drawSkeleton(landmarks);
-      drawLandmarks(landmarks);
+      drawSkeleton(landmarks, w, h);
+      drawLandmarks(landmarks, w, h);
 
       if (debugMode) {
         console.log(`Hand ${handIndex + 1}: ${landmarks.length} landmarks.`);
@@ -204,16 +214,18 @@ window.onload = function () {
     });
 
     // Show the count of hands detected in the top-left corner.
-    drawHandCount(handResults.length);
+    drawHandCount(handResults.length, h);
   }
 
   /**
    * drawSkeleton — draws lines between connected landmark pairs to form
    * the hand skeleton (finger bones and palm structure).
    *
-   * @param {Array} landmarks - Array of 21 { x, y, z } landmark objects.
+   * @param {Array}  landmarks - Array of 21 { x, y, z } landmark objects.
+   * @param {number} w         - Canvas/video width in pixels.
+   * @param {number} h         - Canvas/video height in pixels.
    */
-  function drawSkeleton(landmarks) {
+  function drawSkeleton(landmarks, w, h) {
     ctx.strokeStyle = SKELETON_COLOR;
     ctx.lineWidth   = 2;
 
@@ -221,8 +233,8 @@ window.onload = function () {
       const ptA = landmarks[a];
       const ptB = landmarks[b];
       ctx.beginPath();
-      ctx.moveTo(ptA.x * canvas.width,  ptA.y * canvas.height);
-      ctx.lineTo(ptB.x * canvas.width,  ptB.y * canvas.height);
+      ctx.moveTo(ptA.x * w, ptA.y * h);
+      ctx.lineTo(ptB.x * w, ptB.y * h);
       ctx.stroke();
     });
   }
@@ -230,16 +242,18 @@ window.onload = function () {
   /**
    * drawLandmarks — draws a filled circle at each of the 21 hand landmarks.
    *
-   * @param {Array} landmarks - Array of 21 { x, y, z } landmark objects.
+   * @param {Array}  landmarks - Array of 21 { x, y, z } landmark objects.
+   * @param {number} w         - Canvas/video width in pixels.
+   * @param {number} h         - Canvas/video height in pixels.
    */
-  function drawLandmarks(landmarks) {
+  function drawLandmarks(landmarks, w, h) {
     ctx.fillStyle = LANDMARK_COLOR;
 
     landmarks.forEach((point) => {
       ctx.beginPath();
       ctx.arc(
-        point.x * canvas.width,
-        point.y * canvas.height,
+        point.x * w,
+        point.y * h,
         DOT_RADIUS, 0, Math.PI * 2
       );
       ctx.fill();
@@ -250,14 +264,15 @@ window.onload = function () {
    * drawHandCount — displays the number of hands detected in the corner.
    *
    * @param {number} count - Number of hands currently detected.
+   * @param {number} h     - Canvas height in pixels.
    */
-  function drawHandCount(count) {
+  function drawHandCount(count, h) {
     ctx.font      = "bold 16px monospace";
     ctx.fillStyle = count > 0 ? LANDMARK_COLOR : "#888";
     ctx.fillText(
       `Hands detected: ${count}`,
       10,
-      canvas.height - 10
+      h - 10
     );
   }
 };

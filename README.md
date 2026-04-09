@@ -8,7 +8,7 @@ The hands-on thread running through the whole project is a progressive series of
 2. **Face mesh** — map 468 facial landmarks with region-specific colouring
 3. **Hands and face combined** — run both models together in a split-screen view
 
-> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](gallery/index.html).
+> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](gallery/index.html). *(Open locally or via GitHub Pages — the link does not render as a live demo on github.com.)*
 
 ---
 
@@ -136,7 +136,7 @@ Detect up to two hands in your webcam feed and draw the 21 landmark points per h
 Map 468 facial landmarks onto a detected face, with distinct colours for the eyes, eyebrows, nose, lips, and irises.
 
 **What you see:**
-- 468 coloured dots spread across the full face surface
+- 468–478 coloured dots spread across the full face surface (468 base landmarks + 10 iris points when `refineLandmarks: true`)
 - Region-specific colouring (blue = eyes, yellow = eyebrows, red = lips, purple = nose, cyan = irises)
 - A count of faces currently detected in the corner
 

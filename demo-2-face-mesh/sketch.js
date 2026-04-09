@@ -215,32 +215,45 @@ window.onload = function () {
   /**
    * drawFrame — clears the canvas and redraws the webcam feed plus any
    * detected face landmarks coloured by facial region.
+   *
+   * Uses video.videoWidth/Height directly so drawing is correct even if
+   * the loadedmetadata event fires after the first onResults callback.
    */
   function drawFrame() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+
+    // Keep canvas dimensions in sync with the live video size.
+    if (canvas.width !== w)  canvas.width  = w;
+    if (canvas.height !== h) canvas.height = h;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(video, 0, 0, w, h);
 
     faceResults.forEach((landmarks, faceIndex) => {
-      drawFaceLandmarks(landmarks);
+      drawFaceLandmarks(landmarks, w, h);
 
       if (debugMode) {
         console.log(`Face ${faceIndex + 1}: ${landmarks.length} landmarks.`);
       }
     });
 
-    drawFaceCount(faceResults.length);
+    drawFaceCount(faceResults.length, h);
+    drawLegend(w, h);
   }
 
   /**
    * drawFaceLandmarks — draws a coloured dot at each landmark position.
    * The colour depends on which facial region the landmark belongs to.
    *
-   * @param {Array} landmarks - Array of { x, y, z } landmark objects.
+   * @param {Array}  landmarks - Array of { x, y, z } landmark objects.
+   * @param {number} w         - Canvas/video width in pixels.
+   * @param {number} h         - Canvas/video height in pixels.
    */
-  function drawFaceLandmarks(landmarks) {
+  function drawFaceLandmarks(landmarks, w, h) {
     landmarks.forEach((point, index) => {
-      const px = point.x * canvas.width;
-      const py = point.y * canvas.height;
+      const px = point.x * w;
+      const py = point.y * h;
 
       // Determine colour based on region membership.
       let color  = REGION_COLORS.general;
@@ -274,22 +287,26 @@ window.onload = function () {
    * drawFaceCount — displays the number of faces detected in the corner.
    *
    * @param {number} count - Number of faces currently detected.
+   * @param {number} h     - Canvas height in pixels.
    */
-  function drawFaceCount(count) {
+  function drawFaceCount(count, h) {
     ctx.font      = "bold 16px monospace";
     ctx.fillStyle = count > 0 ? "#60a5fa" : "#888";
     ctx.fillText(
       `Faces detected: ${count}`,
       10,
-      canvas.height - 10
+      h - 10
     );
   }
 
   /**
    * drawLegend — draws a small colour key in the bottom-right corner
    * showing which colour corresponds to which facial region.
+   *
+   * @param {number} w - Canvas width in pixels.
+   * @param {number} h - Canvas height in pixels.
    */
-  function drawLegend() {
+  function drawLegend(w, h) {
     const regions = [
       { label: "Eyes",     color: REGION_COLORS.eye },
       { label: "Eyebrows", color: REGION_COLORS.eyebrow },
@@ -299,8 +316,8 @@ window.onload = function () {
     ];
 
     const lineHeight = 18;
-    const startX = canvas.width - 120;
-    const startY = canvas.height - (regions.length * lineHeight) - 10;
+    const startX = w - 120;
+    const startY = h - (regions.length * lineHeight) - 10;
 
     ctx.font = "12px monospace";
 
