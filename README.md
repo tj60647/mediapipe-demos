@@ -8,7 +8,7 @@ The hands-on thread running through the whole project is a progressive series of
 2. **Face mesh** — map 468 facial landmarks with region-specific colouring
 3. **Hands and face combined** — run both models together in a split-screen view
 
-> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](gallery/index.html). *(Open locally or via GitHub Pages — the link does not render as a live demo on github.com.)*
+> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/). *(Also works locally — open `gallery/index.html` directly in your browser.)*
 
 ---
 
@@ -198,7 +198,7 @@ Run both models simultaneously on the same webcam frame, displayed in a split-sc
 
 ## Getting Started Checklist
 
-- [ ] Open [`gallery/index.html`](gallery/index.html) in your browser
+- [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or `gallery/index.html` locally)
 - [ ] Click **Demo 1 — Hand Tracking** and allow webcam access
 - [ ] Hold your hand up in front of the camera — you should see green dots and lines follow your joints
 - [ ] Open **Demo 2 — Face Mesh** — look at the camera and see 468 coloured dots map to your facial features
