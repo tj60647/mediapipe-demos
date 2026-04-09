@@ -12,6 +12,8 @@ The hands-on thread running through the whole project is a progressive series of
 
 > **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/). *(Also works locally — open `gallery/index.html` directly in your browser.)*
 
+> **🌐 Beyond Face and Hands:** A comparative overview of five additional MediaPipe tasks — object detection, gesture recognition, pose tracking, image classification, and audio classification — with project prompts and Studio links. Open [`beyond/index.html`](https://tj60647.github.io/mediapipe-demos/beyond/) in your browser.
+
 ---
 
 ## The Tools We Use
@@ -103,6 +105,9 @@ demo-5-face-instrument/
 
 resources/
 └── index.html                         ← exploration sources and links
+
+beyond/
+└── index.html                         ← beyond face and hands — five additional tasks
 ```
 
 ---
@@ -291,6 +296,22 @@ Turn the face into a proximity-triggered control surface. Nine named regions —
 
 ---
 
+## Beyond Face and Hands
+
+Once you are comfortable with the demos, there are many more MediaPipe tasks to explore. The [`beyond/index.html`](https://tj60647.github.io/mediapipe-demos/beyond/) page introduces five of them with a comparative frame — what each task detects, what it outputs, what interactions it makes possible, and where it is likely to fail.
+
+| Task | What it detects | Project prompt |
+|---|---|---|
+| **Object Detection** | Up to 80 labelled object categories with bounding boxes | Domestic Object Orchestra |
+| **Gesture Recognition** | Seven built-in hand gestures plus underlying landmarks | Secret Handshake Operating System |
+| **Pose Tracking** | 33 full-body landmarks in 3D | Full-Body Puppet Weather System |
+| **Image Classification** | Thousands of ImageNet categories from a single frame | Found Image Fortune Teller |
+| **Audio Classification** | 521 sound categories from a live microphone | Noisy Room Translator |
+
+Each task card on the Beyond page links directly to MediaPipe Studio so you can try it before writing any code.
+
+---
+
 ## Getting Started Checklist
 
 - [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or `gallery/index.html` locally)
@@ -303,6 +324,7 @@ Turn the face into a proximity-triggered control surface. Nine named regions —
 - [ ] Open `sketch.js` in any demo and read through the comments to understand how each part works
 - [ ] Try changing `debugMode = true` to see per-frame log output in the browser DevTools Console
 - [ ] Visit the [Exploration Sources](https://tj60647.github.io/mediapipe-demos/resources/) page and try MediaPipe Studio before writing any code
+- [ ] Open the [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) page and try two tasks in MediaPipe Studio
 
 ---
 
