@@ -7,6 +7,8 @@ The hands-on thread running through the whole project is a progressive series of
 1. **Hand tracking** — detect and visualise the 21 joints of one or two hands
 2. **Face mesh** — map 468 facial landmarks with region-specific colouring
 3. **Hands and face combined** — run both models together in a split-screen view
+4. **Interaction basics** — turn landmark coordinates into interactive inputs: distance, zones, counts, and mapped values
+5. **Face instrument** — use your face as a proximity-triggered control surface with nine named regions
 
 > **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/). *(Also works locally — open `gallery/index.html` directly in your browser.)*
 
@@ -63,6 +65,10 @@ Demo 1 — hand landmarks only
 Demo 2 — face landmarks only
     ↓ combine both
 Demo 3 — hands + face, side-by-side split view
+    ↓ add interaction logic
+Demo 4 — interaction basics: distance, zones, counts, mapping
+    ↓ face as control surface
+Demo 5 — face instrument: proximity triggers across face regions
 ```
 
 ---
@@ -86,6 +92,17 @@ demo-2-face-mesh/
 demo-3-hands-and-face/
 ├── index.html
 └── sketch.js
+
+demo-4-interaction/
+├── index.html
+└── sketch.js
+
+demo-5-face-instrument/
+├── index.html
+└── sketch.js
+
+resources/
+└── index.html                         ← exploration sources and links
 ```
 
 ---
@@ -196,6 +213,84 @@ Run both models simultaneously on the same webcam frame, displayed in a split-sc
 
 ---
 
+## Demo 4 — Interaction Basics
+
+Turn landmark coordinates into interactive inputs. This demo shows four patterns, all driven by the same webcam data used for drawing in Demos 1–3.
+
+**What you see:**
+- Zone overlay: three highlighted columns (LEFT / CENTRE / RIGHT) showing which zone the index fingertip is in
+- Proximity line: a dashed coloured line connecting the index fingertip to the nose tip, labelled with the pixel distance
+- Colour-coded hand dots: hue shifts from red (0 fingers raised) to green (4 fingers raised)
+- Distance bar: right-edge vertical bar showing nose-to-finger distance
+- Height strip: left-edge gradient strip with a marker showing the current fingertip height mapped to a hue
+
+📂 **Sketch:** [`demo-4-interaction/sketch.js`](demo-4-interaction/sketch.js)
+
+> **📐 Concept Sidebar: Four Interaction Patterns**
+>
+> | Pattern | Input | Output |
+> |---|---|---|
+> | Distance | Two landmark positions | A pixel value (continuous) |
+> | Zone | One normalised x coordinate | LEFT / CENTRE / RIGHT (discrete) |
+> | Count | Four tip-vs-PIP comparisons | Integer 0–4 (discrete) |
+> | Mapping | One normalised y coordinate | A hue value 0–200 (continuous) |
+>
+> All four patterns convert raw coordinate data into something that can drive a visual, audio, or behavioural response. The key insight: any landmark value can be an input, not just a drawing position.
+
+> **📐 Concept Sidebar: Proximity (Distance)**
+>
+> Euclidean distance between two landmarks in pixels:
+> ```js
+> const dx = (a.x - b.x) * canvasWidth;
+> const dy = (a.y - b.y) * canvasHeight;
+> const dist = Math.sqrt(dx * dx + dy * dy);
+> ```
+> Use `dist` to trigger effects (is the hand close enough?), map to a range (how close is it?), or smooth over time (is it getting closer or further away?).
+
+**Deliverable:** A live canvas with all four interaction patterns running simultaneously, with labelled HUD values showing their current state.
+
+---
+
+## Demo 5 — Face Instrument
+
+Turn the face into a proximity-triggered control surface. Nine named regions — forehead, eyebrows, eyes, nose, lips, and cheeks — each activate when the index fingertip comes within range.
+
+**What you see:**
+- Subtle face mesh dots showing all 468 landmarks
+- Dim rings at each of the nine face regions (inactive)
+- Bright glowing rings + filled centre when a region is active
+- Expanding ripple animation each time a region is newly activated
+- A legend panel listing all regions with their current activation state
+- The index fingertip highlighted as a larger ring
+
+📂 **Sketch:** [`demo-5-face-instrument/sketch.js`](demo-5-face-instrument/sketch.js)
+
+> **📐 Concept Sidebar: Proximity Trigger**
+>
+> A proximity trigger converts a continuous distance value into an on/off state:
+> ```js
+> const dist = Math.sqrt(dx * dx + dy * dy);
+> const active = dist < PROXIMITY_THRESHOLD;
+> ```
+> This is the simplest possible interaction rule. The threshold is tuneable — increase it to make regions easier to activate, decrease it to require the finger to be very close. Noisy tracking becomes a design material rather than a problem: proximity thresholds let you absorb small jitter without false triggers.
+
+> **📐 Concept Sidebar: Rising Edge Detection**
+>
+> To spawn a visual effect only when a region *first* becomes active (not on every frame while it stays active), compare the current active set to the previous frame's active set:
+> ```js
+> // prevActive is a Set from the last frame
+> if (!prevActive.has(region.name)) {
+>   // region just became active — spawn a ripple
+>   ripples.push({ x, y, color, radius: 20, alpha: 0.9 });
+> }
+> prevActive = new Set(currentActive.keys());
+> ```
+> This is a *rising edge* — it fires once per activation event rather than continuously.
+
+**Deliverable:** A live canvas where moving your index finger near different parts of your face triggers distinct coloured glows and ripples across nine face regions.
+
+---
+
 ## Getting Started Checklist
 
 - [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or `gallery/index.html` locally)
@@ -203,8 +298,26 @@ Run both models simultaneously on the same webcam frame, displayed in a split-sc
 - [ ] Hold your hand up in front of the camera — you should see green dots and lines follow your joints
 - [ ] Open **Demo 2 — Face Mesh** — look at the camera and see 468 coloured dots map to your facial features
 - [ ] Open **Demo 3 — Hands and Face Combined** — hold your hand near your face and see both models running at once
+- [ ] Open **Demo 4 — Interaction Basics** — move your index finger around and watch the distance, zone, and finger-count values change in the HUD
+- [ ] Open **Demo 5 — Face Instrument** — hover your index fingertip close to your forehead, eyebrows, nose, lips, and cheeks to activate each region
 - [ ] Open `sketch.js` in any demo and read through the comments to understand how each part works
 - [ ] Try changing `debugMode = true` to see per-frame log output in the browser DevTools Console
+- [ ] Visit the [Exploration Sources](https://tj60647.github.io/mediapipe-demos/resources/) page and try MediaPipe Studio before writing any code
+
+---
+
+## Exploration Sources
+
+Before writing code for a new project idea, use these resources to explore what MediaPipe can do and to find reference examples.
+
+| Source | Best for |
+|---|---|
+| [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) | Testing any MediaPipe task in the browser with your webcam — no code required. Adjust thresholds, try different inputs, and decide whether a model fits your idea before building. |
+| [MediaPipe CodePen](https://codepen.io/mediapipe-preview/) | Near-official working examples for each MediaPipe task using the JavaScript task API. Fork a pen to experiment without a local setup. |
+| [OpenProcessing](https://openprocessing.org/) | Sketch culture, remixing, and sharing. Paste any `sketch.js` from this project directly into a new sketch. |
+| [p5.js Examples](https://p5js.org/examples/) | Interaction, drawing, animation, and visual design patterns in p5.js. Useful reference when building on top of the demos. |
+
+📂 **Resources page:** [`resources/index.html`](resources/index.html)
 
 ---
 
