@@ -10,9 +10,34 @@ The hands-on thread running through the whole project is a progressive series of
 4. **Interaction basics** — turn landmark coordinates into interactive inputs: distance, zones, counts, and mapped values
 5. **Face instrument** — use your face as a proximity-triggered control surface with nine named regions
 
-> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/). *(Also works locally — open `gallery/index.html` directly in your browser.)*
+> **🖼️ Gallery:** Browse and launch every demo in the project from the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/). *(Also works locally — serve this repo and open `http://localhost:<port>/gallery/`.)*
 
 > **🌐 Beyond Face and Hands:** A comparative overview of five additional MediaPipe tasks — object detection, gesture recognition, pose tracking, image classification, and audio classification — with project prompts and Studio links. Open [`beyond/index.html`](https://tj60647.github.io/mediapipe-demos/beyond/) in your browser.
+
+---
+
+## Run Locally (2 Minutes)
+
+Use a local server so webcam access works reliably.
+
+1. Open a terminal in the repository root.
+2. Start a local server:
+    ```powershell
+    python -m http.server 5500
+    ```
+3. Open one of these URLs:
+    - `http://localhost:5500/gallery/` (start here)
+    - `http://localhost:5500/demo-1-hand-tracking/`
+    - `http://localhost:5500/demo-2-face-mesh/`
+    - `http://localhost:5500/demo-3-hands-and-face/`
+    - `http://localhost:5500/demo-4-interaction/`
+    - `http://localhost:5500/demo-5-face-instrument/`
+
+If `python` is unavailable, try:
+
+```powershell
+py -m http.server 5500
+```
 
 ---
 
@@ -38,7 +63,7 @@ Each landmark has normalised `x`, `y`, and `z` coordinates (0.0–1.0 relative t
 
 [OpenProcessing](https://openprocessing.org) is an online platform for running and sharing browser sketches. Every `sketch.js` in this project can be pasted directly into a new OpenProcessing sketch and run there without any local setup.
 
-> **Note:** Paste the contents of any `sketch.js` into a new OpenProcessing sketch to run it there. If you prefer to work locally, open the matching `index.html` file directly in your browser.
+> **Note:** Paste the contents of any `sketch.js` into a new OpenProcessing sketch to run it there. If you prefer to work locally, serve this repo on `localhost` and open the matching demo URL in your browser.
 
 ---
 
@@ -84,7 +109,7 @@ gallery/
 └── index.html                         ← launch pad — links to all demos
 
 demo-1-hand-tracking/
-├── index.html                         ← open locally in any modern browser
+├── index.html                         ← open via localhost in any modern browser
 └── sketch.js                          ← paste into OpenProcessing
 
 demo-2-face-mesh/
@@ -180,7 +205,7 @@ Map 468 facial landmarks onto a detected face, with distinct colours for the eye
 
 ## Demo 3 — Hands and Face Combined
 
-Run both models simultaneously on the same webcam frame, displayed in a split-screen canvas.
+Run both models on the same webcam stream in a split-screen canvas (raw feed on the left, overlay on the right).
 
 **What you see:**
 - **Left half** — the raw webcam feed with no overlay
@@ -191,12 +216,20 @@ Run both models simultaneously on the same webcam frame, displayed in a split-sc
 
 > **📐 Concept Sidebar: Running Two Models Per Frame**
 >
-> Both models process the same video frame inside the Camera's `onFrame` callback using `await`:
+> This demo uses two loops:
+> - **Inference loop** (`frameLoop`) sends each frame to Hands first, then FaceMesh, using `await`.
+> - **Render loop** (`renderLoop`) redraws at display refresh rate using the latest stored results.
+>
 > ```js
 > await hands.send({ image: video });
 > await faceMesh.send({ image: video });
 > ```
-> Each model calls its own `onResults` callback asynchronously when it finishes. The update flags `newHand` and `newFace` prevent `drawResults()` from being called before either model has returned its first result.
+>
+> Sequential sends are intentional for stability in this combined legacy-solution setup.
+
+> **🖐️ Hand Count Control (Demo 3)**
+>
+> Demo 3 includes a **Hands** selector (1 or 2) above the canvas. This updates `maxNumHands` live so you can trade off robustness vs. multi-hand interaction without reloading.
 
 > **📐 Concept Sidebar: Side-by-Side Canvas Layout**
 >
@@ -312,9 +345,47 @@ Each task card on the Beyond page links directly to MediaPipe Studio so you can 
 
 ---
 
+## AI Remix Workflow
+
+Students can use AI coding assistants to remix patterns across demos while keeping a stable baseline.
+
+### Remix Recipe
+
+1. Start from one working demo in the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/).
+2. Borrow one pattern from the core demos:
+   - Demo 3: split view and combined model pipeline
+   - Demo 4: distance / zone / count / mapping logic
+   - Demo 5: proximity triggers and rising-edge effects
+3. Add one prompt from [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/).
+4. Ask the assistant for one small change only (one feature per request).
+5. Run and test after each change before asking for the next one.
+
+> **📐 Concept Sidebar: Keep One Thing Constant**
+>
+> When remixing with AI, keep your base demo unchanged except for one clearly scoped addition. If something breaks, you can immediately identify which change caused it and roll back only that part.
+
+### Suggested Prompt Template
+
+```text
+I am editing demo-X in mediapipe-demos.
+Keep the existing structure and comments.
+Add only one feature: <feature>.
+Do not rewrite the whole file.
+Explain which landmarks, thresholds, and mappings you used.
+```
+
+### Remix Deliverable
+
+- [ ] One baseline demo still works exactly as before
+- [ ] One new interaction feature works reliably
+- [ ] You can explain the landmarks and threshold(s) used
+- [ ] Your code still runs from `http://localhost:<port>/...`
+
+---
+
 ## Getting Started Checklist
 
-- [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or `gallery/index.html` locally)
+- [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or via `http://localhost:<port>/gallery/` when running locally)
 - [ ] Click **Demo 1 — Hand Tracking** and allow webcam access
 - [ ] Hold your hand up in front of the camera — you should see green dots and lines follow your joints
 - [ ] Open **Demo 2 — Face Mesh** — look at the camera and see 468 coloured dots map to your facial features
@@ -350,6 +421,16 @@ Before writing code for a new project idea, use these resources to explore what 
 3. MediaPipe runs entirely client-side. No video data is sent to any server.
 4. For best performance, use Chrome or Edge on a reasonably modern device.
 5. To use a sketch in OpenProcessing, paste the `sketch.js` contents into a new sketch and add the MediaPipe CDN `<script>` tags in the OpenProcessing sketch settings.
+
+---
+
+## Troubleshooting
+
+1. **No webcam prompt or blank video:** make sure you're opening the demo via `http://localhost:<port>/...` (not `file://...`).
+2. **Camera blocked:** click the camera icon in the browser address bar and allow access, then reload.
+3. **Old behavior after code changes:** hard refresh with `Ctrl+F5` to clear cached scripts.
+4. **Console message about async listener / `installHook.js`:** this is usually from a browser extension, not the demo code.
+5. **404 for `/.well-known/appspecific/com.chrome.devtools.json`:** harmless Chrome/DevTools probe, safe to ignore.
 
 ---
 

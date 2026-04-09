@@ -119,6 +119,19 @@ const FACE_REGIONS = [
   { name: "Right Cheek",    index: 454, color: "#4ade80" },  // green
 ];
 
+// In demos that run multiple MediaPipe solutions together, route each
+// requested asset to the correct package CDN path by filename prefix.
+function locateMediaPipeAsset(file) {
+  const lower = file.toLowerCase();
+
+  // FaceMesh assets consistently start with "face" (e.g. face_mesh_*,
+  // face_landmark_*, face_detection_*). Route everything else to Hands.
+  if (lower.startsWith("face")) {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`;
+  }
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+}
+
 // =============================================================================
 // ENTRY POINT
 // =============================================================================
@@ -151,8 +164,7 @@ window.onload = function () {
   // ── MediaPipe Hands setup ────────────────────────────────────────────────
 
   const hands = new Hands({
-    locateFile: file =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    locateFile: locateMediaPipeAsset
   });
 
   hands.setOptions({
@@ -175,8 +187,7 @@ window.onload = function () {
   // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
 
   const faceMesh = new FaceMesh({
-    locateFile: file =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
+    locateFile: locateMediaPipeAsset
   });
 
   faceMesh.setOptions({
@@ -254,15 +265,20 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to both models in parallel.
+   * frameLoop — sends the current video frame to both models.
+   *
+   * The sends are intentionally sequential to avoid runtime module conflicts
+   * observed with parallel Promise.all() execution in legacy solution builds.
    */
   async function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      await Promise.all([
-        hands.send({ image: video }),
-        faceMesh.send({ image: video })
-      ]);
+      try {
+        await hands.send({ image: video });
+        await faceMesh.send({ image: video });
+      } catch (err) {
+        console.error("Frame processing error:", err);
+      }
     }
     requestAnimationFrame(frameLoop);
   }

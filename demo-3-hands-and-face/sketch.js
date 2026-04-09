@@ -28,8 +28,8 @@
 // function reads both stored results and renders a single combined frame.
 //
 // The pipeline runs two independent loops:
-//   frameLoop  — sends each camera frame to both models in parallel via
-//                Promise.all(), running at the model's inference rate.
+//   frameLoop  — sends each camera frame to both models sequentially
+//                (Hands first, then FaceMesh) at the model inference rate.
 //   renderLoop — calls drawResults() on every requestAnimationFrame tick
 //                (~60 fps), keeping the canvas smooth regardless of inference
 //                speed. It always uses the most recently stored results.
@@ -71,6 +71,23 @@ const HAND_SKELETON_COLOR = "rgba(74, 222, 128, 0.5)";
 // Colour for face landmarks.
 const FACE_COLOR = "#f87171";  // red / coral
 
+// Default hand-tracking mode for Demo 3. Can be switched live in the UI.
+let desiredMaxHands = 2;
+
+// MediaPipe solution bundles use different asset filename prefixes.
+// In this combined demo, route each requested asset to the correct CDN
+// package so Hands assets are not accidentally fetched from FaceMesh paths.
+function locateMediaPipeAsset(file) {
+  const lower = file.toLowerCase();
+
+  // FaceMesh assets consistently start with "face" (e.g. face_mesh_*,
+  // face_landmark_*, face_detection_*). Route everything else to Hands.
+  if (lower.startsWith("face")) {
+    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`;
+  }
+  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
+}
+
 // =============================================================================
 // HAND CONNECTIONS
 // =============================================================================
@@ -109,12 +126,11 @@ window.onload = function () {
   // ── MediaPipe Hands setup ────────────────────────────────────────────────
 
   const hands = new Hands({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
+    locateFile: locateMediaPipeAsset
   });
 
   hands.setOptions({
-    maxNumHands: 2,
+    maxNumHands: desiredMaxHands,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5,
     modelComplexity: 1
@@ -138,8 +154,7 @@ window.onload = function () {
   // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
 
   const faceMesh = new FaceMesh({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
+    locateFile: locateMediaPipeAsset
   });
 
   faceMesh.setOptions({
@@ -158,6 +173,34 @@ window.onload = function () {
   if (debugMode) {
     console.log("MediaPipe FaceMesh initialised.");
   }
+
+  /**
+   * setupHandCountToggle — wires the 1/2-hands selector to the Hands model
+   * so users can switch tracking mode without reloading the page.
+   */
+  function setupHandCountToggle() {
+    const select = document.getElementById("handCountSelect");
+    if (!select) return;
+
+    select.value = String(desiredMaxHands);
+
+    select.onchange = async () => {
+      const parsed = Number.parseInt(select.value, 10);
+      const nextMaxHands = parsed === 2 ? 2 : 1;
+      desiredMaxHands = nextMaxHands;
+
+      try {
+        await hands.setOptions({ maxNumHands: desiredMaxHands });
+        if (debugMode) {
+          console.log(`Updated maxNumHands to ${desiredMaxHands}.`);
+        }
+      } catch (err) {
+        console.error("Failed to update hand tracking mode:", err);
+      }
+    };
+  }
+
+  setupHandCountToggle();
 
   // ── Camera management ────────────────────────────────────────────────────
 
@@ -232,18 +275,22 @@ window.onload = function () {
   /**
    * frameLoop — sends the current video frame to both MediaPipe models on
    * every animation tick. Stops automatically when frameLoopActive is false.
-   * Both models are sent in parallel to halve the per-frame inference cost.
+   *
+   * The sends are intentionally sequential to avoid runtime module conflicts
+   * observed with parallel Promise.all() execution in legacy solution builds.
    */
   async function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      if (debugMode) {
-        console.log("Sending frame to both models...");
+      try {
+        if (debugMode) {
+          console.log("Sending frame to Hands, then FaceMesh...");
+        }
+        await hands.send({ image: video });
+        await faceMesh.send({ image: video });
+      } catch (err) {
+        console.error("Frame processing error:", err);
       }
-      await Promise.all([
-        hands.send({ image: video }),
-        faceMesh.send({ image: video })
-      ]);
     }
     requestAnimationFrame(frameLoop);
   }
