@@ -110,17 +110,6 @@ window.onload = function () {
     return;
   }
 
-  // Set canvas size to match the video feed once dimensions are known.
-  // The canvas is the same size as the video (640×480) so landmark
-  // coordinates (which are normalised 0–1) map directly.
-  video.addEventListener("loadedmetadata", () => {
-    canvas.width  = video.videoWidth;
-    canvas.height = video.videoHeight;
-    if (debugMode) {
-      console.log(`Canvas set to ${canvas.width}×${canvas.height}`);
-    }
-  });
-
   // ── MediaPipe Hands setup ────────────────────────────────────────────────
 
   // The Hands model is loaded from the jsDelivr CDN. locateFile tells
@@ -161,26 +150,119 @@ window.onload = function () {
     console.log("MediaPipe Hands initialised.");
   }
 
-  // ── Camera (webcam) setup ────────────────────────────────────────────────
+  // ── Camera management ────────────────────────────────────────────────────
 
-  // The Camera utility captures frames from the webcam and calls onFrame
-  // for each one. We pass the video element to Hands for processing.
-  const cam = new Camera(video, {
-    onFrame: async () => {
+  // Holds the active MediaStream so we can stop it when switching cameras.
+  let currentStream = null;
+
+  // Controls whether the frame loop is running.
+  let frameLoopActive = false;
+
+  /**
+   * startCamera — opens the webcam with an optional specific device and
+   * starts the per-frame loop that feeds images to the Hands model.
+   *
+   * @param {string} [deviceId] — exact device ID to open, or omit / pass ""
+   *                              to let the browser choose the default camera.
+   */
+  async function startCamera(deviceId) {
+    // Halt the previous frame loop before replacing the stream.
+    frameLoopActive = false;
+
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+      currentStream = null;
+    }
+
+    const videoConstraints = { width: 640, height: 480 };
+    if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+
+    try {
+      currentStream = await navigator.mediaDevices.getUserMedia(
+        { video: videoConstraints }
+      );
+    } catch (err) {
+      console.error("Could not open camera:", err);
+      return;
+    }
+
+    video.srcObject = currentStream;
+
+    // Keep canvas dimensions in sync with the new stream's resolution.
+    video.onloadedmetadata = () => {
+      canvas.width  = video.videoWidth;
+      canvas.height = video.videoHeight;
+      if (debugMode) {
+        console.log(`Canvas set to ${canvas.width}×${canvas.height}`);
+      }
+    };
+
+    video.play();
+
+    if (debugMode) {
+      console.log("Webcam started.");
+    }
+
+    frameLoopActive = true;
+    requestAnimationFrame(frameLoop);
+  }
+
+  /**
+   * frameLoop — sends the current video frame to the Hands model on every
+   * animation tick. Stops automatically when frameLoopActive is false.
+   */
+  async function frameLoop() {
+    if (!frameLoopActive) return;
+    if (video.readyState >= 2) {
       if (debugMode) {
         console.log("Sending frame to Hands model...");
       }
       await hands.send({ image: video });
-    },
-    width: 640,
-    height: 480
-  });
-
-  cam.start();
-
-  if (debugMode) {
-    console.log("Webcam started.");
+    }
+    requestAnimationFrame(frameLoop);
   }
+
+  /**
+   * populateCameraSelect — enumerates video-input devices and fills the
+   * on-page <select>. The wrapper is revealed only when more than one
+   * camera is available. Requires camera permission to have been granted
+   * so that device labels are populated.
+   *
+   * @param {string} activeDeviceId — the deviceId currently in use, used
+   *                                  to pre-select the matching option.
+   */
+  async function populateCameraSelect(activeDeviceId) {
+    const select  = document.getElementById("cameraSelect");
+    const wrapper = document.getElementById("cameraSelectWrapper");
+    if (!select || !wrapper) return;
+
+    const devices     = await navigator.mediaDevices.enumerateDevices();
+    const videoInputs = devices.filter(d => d.kind === "videoinput");
+
+    select.innerHTML = "";
+    videoInputs.forEach((device, i) => {
+      const opt    = document.createElement("option");
+      opt.value    = device.deviceId;
+      opt.text     = device.label || `Camera ${i + 1}`;
+      opt.selected = device.deviceId === activeDeviceId;
+      select.appendChild(opt);
+    });
+
+    // Show the selector only when there are multiple cameras to choose from.
+    wrapper.style.display = videoInputs.length > 1 ? "flex" : "none";
+
+    select.onchange = () => startCamera(select.value);
+  }
+
+  // Start with the default camera, then enumerate devices for the selector.
+  // Enumerating after getUserMedia ensures the browser has granted permission
+  // and will return human-readable device labels.
+  startCamera().then(() => {
+    if (!currentStream) return;
+    const track    = currentStream.getVideoTracks()[0];
+    const activeId = track ? track.getSettings().deviceId : "";
+    populateCameraSelect(activeId);
+  });
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
