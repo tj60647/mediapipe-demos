@@ -27,10 +27,12 @@
 // own onResults callback that stores the latest results. A shared drawResults()
 // function reads both stored results and renders a single combined frame.
 //
-// To avoid drawing a partial frame (hands updated but face not yet), the
-// Camera's onFrame callback calls drawResults() once per frame, after sending
-// the image to both models. The update flags (newHand, newFace) guard against
-// drawing an entirely empty frame before either model has returned results.
+// The pipeline runs two independent loops:
+//   frameLoop  — sends each camera frame to both models in parallel via
+//                Promise.all(), running at the model's inference rate.
+//   renderLoop — calls drawResults() on every requestAnimationFrame tick
+//                (~60 fps), keeping the canvas smooth regardless of inference
+//                speed. It always uses the most recently stored results.
 //
 // WHAT IS THE DIFFERENCE BETWEEN THE TWO HALVES?
 // -----------------------------------------------
@@ -97,7 +99,7 @@ window.onload = function () {
 
   const video  = document.getElementById("video");
   const canvas = document.getElementById("canvas");
-  const ctx    = canvas.getContext("2d");
+  const ctx    = canvas.getContext("2d", { alpha: false });
 
   if (!video || !canvas) {
     console.error("Error: Could not find #video or #canvas in the DOM.");
@@ -118,17 +120,12 @@ window.onload = function () {
     modelComplexity: 1
   });
 
-  // Flags that tell drawResults() when fresh data is available from each model.
-  let newHand = false;
-  let newFace = false;
-
   // Arrays that store the most recent results from each model.
   let handResults = [];
   let faceResults = [];
 
   hands.onResults(function (results) {
     handResults = results.multiHandLandmarks || [];
-    newHand = true;
     if (debugMode) {
       console.log(`Hands: ${handResults.length} detected.`);
     }
@@ -153,7 +150,6 @@ window.onload = function () {
 
   faceMesh.onResults(function (results) {
     faceResults = results.multiFaceLandmarks || [];
-    newFace = true;
     if (debugMode) {
       console.log(`Faces: ${faceResults.length} detected.`);
     }
@@ -219,11 +215,24 @@ window.onload = function () {
 
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
+    requestAnimationFrame(renderLoop);
+  }
+
+  /**
+   * renderLoop — redraws the canvas at the display's refresh rate (~60 fps),
+   * independent of the inference rate. The video feed stays smooth even when
+   * both ML models run slower than 60 fps.
+   */
+  function renderLoop() {
+    if (!frameLoopActive) return;
+    drawResults();
+    requestAnimationFrame(renderLoop);
   }
 
   /**
    * frameLoop — sends the current video frame to both MediaPipe models on
    * every animation tick. Stops automatically when frameLoopActive is false.
+   * Both models are sent in parallel to halve the per-frame inference cost.
    */
   async function frameLoop() {
     if (!frameLoopActive) return;
@@ -231,14 +240,10 @@ window.onload = function () {
       if (debugMode) {
         console.log("Sending frame to both models...");
       }
-      await hands.send({ image: video });
-      await faceMesh.send({ image: video });
-
-      if (newHand || newFace) {
-        drawResults();
-        newHand = false;
-        newFace = false;
-      }
+      await Promise.all([
+        hands.send({ image: video }),
+        faceMesh.send({ image: video })
+      ]);
     }
     requestAnimationFrame(frameLoop);
   }
@@ -347,14 +352,14 @@ window.onload = function () {
     ctx.strokeStyle = HAND_SKELETON_COLOR;
     ctx.lineWidth   = 2;
 
+    ctx.beginPath();
     HAND_CONNECTIONS.forEach(([a, b]) => {
       const ptA = landmarks[a];
       const ptB = landmarks[b];
-      ctx.beginPath();
       ctx.moveTo(w + ptA.x * w, ptA.y * h);
       ctx.lineTo(w + ptB.x * w, ptB.y * h);
-      ctx.stroke();
     });
+    ctx.stroke();
   }
 
   /**
@@ -367,11 +372,14 @@ window.onload = function () {
   function drawHandDots(landmarks, w, h) {
     ctx.fillStyle = HAND_COLOR;
 
+    ctx.beginPath();
     landmarks.forEach((point) => {
-      ctx.beginPath();
-      ctx.arc(w + point.x * w, point.y * h, HAND_DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
+      const cx = w + point.x * w;
+      const cy = point.y * h;
+      ctx.moveTo(cx + HAND_DOT_RADIUS, cy);
+      ctx.arc(cx, cy, HAND_DOT_RADIUS, 0, Math.PI * 2);
     });
+    ctx.fill();
   }
 
   /**
@@ -384,11 +392,14 @@ window.onload = function () {
   function drawFaceDots(landmarks, w, h) {
     ctx.fillStyle = FACE_COLOR;
 
+    ctx.beginPath();
     landmarks.forEach((point) => {
-      ctx.beginPath();
-      ctx.arc(w + point.x * w, point.y * h, FACE_DOT_RADIUS, 0, Math.PI * 2);
-      ctx.fill();
+      const cx = w + point.x * w;
+      const cy = point.y * h;
+      ctx.moveTo(cx + FACE_DOT_RADIUS, cy);
+      ctx.arc(cx, cy, FACE_DOT_RADIUS, 0, Math.PI * 2);
     });
+    ctx.fill();
   }
 
   /**

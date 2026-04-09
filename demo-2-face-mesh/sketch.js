@@ -137,7 +137,7 @@ window.onload = function () {
 
   const video  = document.getElementById("video");
   const canvas = document.getElementById("canvas");
-  const ctx    = canvas.getContext("2d");
+  const ctx    = canvas.getContext("2d", { alpha: false });
 
   if (!video || !canvas) {
     console.error("Error: Could not find #video or #canvas in the DOM.");
@@ -175,7 +175,6 @@ window.onload = function () {
     } else {
       faceResults = [];
     }
-    drawFrame();
   });
 
   if (debugMode) {
@@ -235,6 +234,18 @@ window.onload = function () {
 
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
+    requestAnimationFrame(renderLoop);
+  }
+
+  /**
+   * renderLoop — redraws the canvas at the display's refresh rate (~60 fps),
+   * independent of the inference rate. The video feed stays smooth even when
+   * the ML model runs slower than 60 fps.
+   */
+  function renderLoop() {
+    if (!frameLoopActive) return;
+    drawFrame();
+    requestAnimationFrame(renderLoop);
   }
 
   /**
@@ -332,34 +343,35 @@ window.onload = function () {
    * @param {number} h         - Canvas/video height in pixels.
    */
   function drawFaceLandmarks(landmarks, w, h) {
+    // Classify each landmark into a color group to minimise canvas state changes.
+    // All dots of the same color are drawn in a single beginPath/fill call.
+    const groups = {
+      iris:    { color: REGION_COLORS.iris,    radius: FEATURE_DOT_RADIUS, pts: [] },
+      eye:     { color: REGION_COLORS.eye,     radius: FEATURE_DOT_RADIUS, pts: [] },
+      eyebrow: { color: REGION_COLORS.eyebrow, radius: FEATURE_DOT_RADIUS, pts: [] },
+      lip:     { color: REGION_COLORS.lip,     radius: FEATURE_DOT_RADIUS, pts: [] },
+      nose:    { color: REGION_COLORS.nose,    radius: FEATURE_DOT_RADIUS, pts: [] },
+      general: { color: REGION_COLORS.general, radius: DOT_RADIUS,         pts: [] }
+    };
+
     landmarks.forEach((point, index) => {
-      const px = point.x * w;
-      const py = point.y * h;
+      const entry = { x: point.x * w, y: point.y * h };
+      if      (IRIS_INDICES.has(index))    groups.iris.pts.push(entry);
+      else if (EYE_INDICES.has(index))     groups.eye.pts.push(entry);
+      else if (EYEBROW_INDICES.has(index)) groups.eyebrow.pts.push(entry);
+      else if (LIP_INDICES.has(index))     groups.lip.pts.push(entry);
+      else if (NOSE_INDICES.has(index))    groups.nose.pts.push(entry);
+      else                                 groups.general.pts.push(entry);
+    });
 
-      // Determine colour based on region membership.
-      let color  = REGION_COLORS.general;
-      let radius = DOT_RADIUS;
-
-      if (IRIS_INDICES.has(index)) {
-        color  = REGION_COLORS.iris;
-        radius = FEATURE_DOT_RADIUS;
-      } else if (EYE_INDICES.has(index)) {
-        color  = REGION_COLORS.eye;
-        radius = FEATURE_DOT_RADIUS;
-      } else if (EYEBROW_INDICES.has(index)) {
-        color  = REGION_COLORS.eyebrow;
-        radius = FEATURE_DOT_RADIUS;
-      } else if (LIP_INDICES.has(index)) {
-        color  = REGION_COLORS.lip;
-        radius = FEATURE_DOT_RADIUS;
-      } else if (NOSE_INDICES.has(index)) {
-        color  = REGION_COLORS.nose;
-        radius = FEATURE_DOT_RADIUS;
-      }
-
+    Object.values(groups).forEach(({ color, radius, pts }) => {
+      if (pts.length === 0) return;
       ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.arc(px, py, radius, 0, Math.PI * 2);
+      pts.forEach(({ x, y }) => {
+        ctx.moveTo(x + radius, y);
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+      });
       ctx.fill();
     });
   }
