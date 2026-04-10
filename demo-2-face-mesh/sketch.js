@@ -10,20 +10,19 @@
 //
 // PURPOSE
 // -------
-// This sketch demonstrates how to use MediaPipe FaceMesh to detect and track
-// facial landmarks in real time using your webcam. When a face is detected,
-// 468 landmark points are returned covering the full face surface — eyes,
-// eyebrows, nose, lips, cheeks, and chin.
+// This sketch demonstrates how to use MediaPipe FaceLandmarker (Tasks API) to
+// detect and track facial landmarks in real time using your webcam. When a
+// face is detected, 478 landmark points are returned covering the full face
+// surface — eyes, eyebrows, nose, lips, cheeks, chin, and irises.
 //
 // The landmarks are drawn as coloured dots over the webcam feed, with
 // different colours highlighting specific face regions.
 //
-// WHAT IS MediaPipe FACEMESH?
-// ----------------------------
-// MediaPipe FaceMesh is a machine-learning model from Google that analyses
-// each video frame and returns the 3-D positions of 468 key points on any
-// detected face. The model runs entirely in the browser — no data leaves
-// your device.
+// WHAT IS MediaPipe FACELANDMARKER?
+// ----------------------------------
+// MediaPipe FaceLandmarker (Tasks API) is the current generation of MediaPipe
+// for the web. It uses a WebGL2 delegate by default (falls back to WASM),
+// which runs reliably on Chrome for Android and Samsung Internet 14+.
 //
 // Each landmark has x, y, and z properties:
 //   x, y — normalised position (0.0–1.0 relative to frame width/height)
@@ -38,11 +37,20 @@
 //   Eyebrows    — yellow      (#fde68a)
 //   Lips        — coral       (#f87171)
 //   Nose        — lilac       (#c084fc)
-//   Irises      — cyan        (#67e8f9)
+//   Irises      — cyan        (#67e8f9)  [indices 468–477]
 //   General     — white       (rgba 200,200,200)
 //
 // The region index arrays below come from the MediaPipe FaceMesh
 // canonical face model documentation.
+//
+// ANDROID / SAMSUNG NOTE
+// ----------------------
+// Three improvements have been applied for mobile compatibility:
+//   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
+//   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
+//      GPU/CPU on mid-range Android devices.
+//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
+//      browser is detected, recommending Chrome for Android.
 //
 // DEBUGGING
 // ---------
@@ -61,6 +69,9 @@ const DOT_RADIUS = 1.5;
 
 // Radius for special-region dots (eyes, lips, etc.).
 const FEATURE_DOT_RADIUS = 2.5;
+
+// True when the page is loaded on a touch-capable mobile device.
+const isMobile = navigator.maxTouchPoints > 1;
 
 // =============================================================================
 // FACE REGION INDEX SETS
@@ -127,10 +138,10 @@ const REGION_COLORS = {
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing MediaPipe FaceMesh demo...");
+    console.log("Page loaded, initializing MediaPipe FaceLandmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -144,41 +155,46 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
+  // ── Browser compatibility warning ───────────────────────────────────────
+  showBrowserWarning();
 
-  // The FaceMesh model is loaded from the jsDelivr CDN. locateFile tells
-  // MediaPipe where to find its WebAssembly and model binary files.
-  const faceMesh = new FaceMesh({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
-  });
+  // ── MediaPipe FaceLandmarker setup (Tasks API) ───────────────────────────
+  // FaceLandmarker uses a WebGL2 delegate by default (falls back to WASM),
+  // which runs reliably on Chrome for Android and Samsung Internet 14+.
+  // The standard face_landmarker.task model includes 478 landmarks:
+  // 468 mesh points (indices 0–467) + 10 iris points (indices 468–477).
 
-  faceMesh.setOptions({
-    maxNumFaces: 1,               // track one face (increase for multi-face)
-    refineLandmarks: true,        // enable iris landmarks (indices 468–477)
-    minDetectionConfidence: 0.5,  // confidence needed to detect a face
-    minTrackingConfidence: 0.5    // confidence needed to keep tracking it
-  });
+  const { FilesetResolver, FaceLandmarker } = mpVision;
+
+  let faceLandmarker;
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  } catch (err) {
+    console.error("Failed to load FaceLandmarker:", err);
+    showError(new Error(
+      "Failed to load AI model. " +
+      "On Android, open this page in Chrome for best compatibility. " +
+      err.message
+    ));
+    return;
+  }
 
   // Store the most recent face results so drawFrame() can access them.
   let faceResults = [];
 
-  // onResults is called by MediaPipe after every frame is processed.
-  // results.multiFaceLandmarks is an array of faces, each containing
-  // 468+ landmark objects with { x, y, z } properties.
-  faceMesh.onResults(function (results) {
-    if (results.multiFaceLandmarks) {
-      faceResults = results.multiFaceLandmarks;
-      if (debugMode) {
-        console.log(`Detected ${faceResults.length} face(s).`);
-      }
-    } else {
-      faceResults = [];
-    }
-  });
-
   if (debugMode) {
-    console.log("MediaPipe FaceMesh initialised.");
+    console.log("MediaPipe FaceLandmarker initialised.");
   }
 
   // ── Camera management ────────────────────────────────────────────────────
@@ -191,7 +207,10 @@ window.onload = function () {
 
   /**
    * startCamera — opens the webcam with an optional specific device and
-   * starts the per-frame loop that feeds images to the FaceMesh model.
+   * starts the per-frame loop that feeds images to the FaceLandmarker model.
+   *
+   * On mobile devices the resolution is capped to ≤480×360 at ≤20 fps to
+   * prevent overloading mid-range Android GPU/CPU.
    *
    * @param {string} [deviceId] — exact device ID to open, or omit / pass ""
    *                              to let the browser choose the default camera.
@@ -204,7 +223,14 @@ window.onload = function () {
       currentStream = null;
     }
 
-    const videoConstraints = {
+    // Cap resolution and frame rate on mobile to prevent the WASM/WebGL
+    // backend from being overloaded by full-resolution camera streams.
+    const videoConstraints = isMobile ? {
+      width:      { ideal: 320, max: 480 },
+      height:     { ideal: 240, max: 360 },
+      frameRate:  { ideal: 15, max: 20 },
+      facingMode: { ideal: "user" }
+    } : {
       width:      { ideal: 640 },
       height:     { ideal: 480 },
       facingMode: { ideal: "user" }
@@ -260,16 +286,24 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to the FaceMesh model on
-   * every animation tick. Stops automatically when frameLoopActive is false.
+   * frameLoop — runs FaceLandmarker on the current video frame on every
+   * animation tick and stores the results for renderLoop to draw.
+   * detectForVideo is synchronous in the Tasks API, so no await is needed.
+   * Stops automatically when frameLoopActive is false.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
       if (debugMode) {
-        console.log("Sending frame to FaceMesh model...");
+        console.log("Running FaceLandmarker on frame...");
       }
-      await faceMesh.send({ image: video });
+      try {
+        const result = faceLandmarker.detectForVideo(video, performance.now());
+        // result.faceLandmarks is an array of faces, each an array of {x,y,z}
+        faceResults = result.faceLandmarks;
+      } catch (err) {
+        console.error("Face detection error:", err);
+      }
     }
     requestAnimationFrame(frameLoop);
   }
@@ -320,7 +354,7 @@ window.onload = function () {
    * detected face landmarks coloured by facial region.
    *
    * Uses video.videoWidth/Height directly so drawing is correct even if
-   * the loadedmetadata event fires after the first onResults callback.
+   * the loadedmetadata event fires after the first detection result.
    */
   function drawFrame() {
     const w = video.videoWidth;
@@ -436,17 +470,36 @@ window.onload = function () {
   }
 
   /**
-   * showError — displays a human-readable camera error on the page so that
+   * showBrowserWarning — reveals the #browserWarning banner when the page
+   * is opened in Samsung Internet or a non-Chromium mobile browser.
+   * These browsers may restrict the WebGL/WASM backend used by the model.
+   */
+  function showBrowserWarning() {
+    const ua = navigator.userAgent;
+    const isSamsung         = /SamsungBrowser/i.test(ua);
+    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
+    if (!isSamsung && !isMobileNonChrome) return;
+    const el = document.getElementById("browserWarning");
+    if (!el) return;
+    el.textContent =
+      "For best results on Android, open this page in Chrome. " +
+      "Samsung Internet and other non-Chromium browsers may not support " +
+      "the AI models used in these demos.";
+    el.style.display = "block";
+  }
+
+  /**
+   * showError — displays a human-readable error on the page so that
    * mobile users who cannot open DevTools can still see what went wrong.
    *
-   * @param {Error} err - The error thrown by getUserMedia.
+   * @param {Error} err - The error to display.
    */
   function showError(err) {
     const el = document.getElementById("errorMessage");
     if (!el) return;
     el.textContent = err.name === "NotAllowedError"
       ? "Camera access was denied. Please allow camera permission and reload."
-      : `Camera error: ${err.message || err.name}. Try reloading or use HTTPS.`;
+      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
     el.style.display = "block";
   }
 };

@@ -10,8 +10,9 @@
 //
 // PURPOSE
 // -------
-// This sketch combines MediaPipe Hands and MediaPipe FaceMesh to track both
-// hand landmarks and facial landmarks simultaneously from your webcam.
+// This sketch combines MediaPipe HandLandmarker and FaceLandmarker (Tasks API)
+// to track both hand landmarks and facial landmarks simultaneously from your
+// webcam.
 //
 // The canvas is split into two halves side-by-side:
 //   LEFT  — the raw webcam feed, showing what the camera sees unmodified
@@ -23,13 +24,13 @@
 //
 // ARCHITECTURE
 // ------------
-// Both models process the same video frame independently. Each model has its
-// own onResults callback that stores the latest results. A shared drawResults()
-// function reads both stored results and renders a single combined frame.
+// Both models process the same video frame independently using detectForVideo,
+// which is synchronous in the Tasks API. A shared drawResults() function reads
+// both stored results and renders a single combined frame.
 //
 // The pipeline runs two independent loops:
-//   frameLoop  — sends each camera frame to both models sequentially
-//                (Hands first, then FaceMesh) at the model inference rate.
+//   frameLoop  — runs both landmarkers on each camera frame (synchronously)
+//                and stores the latest results.
 //   renderLoop — calls drawResults() on every requestAnimationFrame tick
 //                (~60 fps), keeping the canvas smooth regardless of inference
 //                speed. It always uses the most recently stored results.
@@ -42,6 +43,15 @@
 //   drawn on top of it. The x coordinates of each landmark are scaled to
 //   video.videoWidth and then shifted right by another video.videoWidth —
 //   placing them in the right half of the canvas.
+//
+// ANDROID / SAMSUNG NOTE
+// ----------------------
+// Three improvements have been applied for mobile compatibility:
+//   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
+//   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
+//      GPU/CPU on mid-range Android devices.
+//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
+//      browser is detected, recommending Chrome for Android.
 //
 // DEBUGGING
 // ---------
@@ -74,19 +84,8 @@ const FACE_COLOR = "#f87171";  // red / coral
 // Default hand-tracking mode for Demo 3. Can be switched live in the UI.
 let desiredMaxHands = 2;
 
-// MediaPipe solution bundles use different asset filename prefixes.
-// In this combined demo, route each requested asset to the correct CDN
-// package so Hands assets are not accidentally fetched from FaceMesh paths.
-function locateMediaPipeAsset(file) {
-  const lower = file.toLowerCase();
-
-  // FaceMesh assets consistently start with "face" (e.g. face_mesh_*,
-  // face_landmark_*, face_detection_*). Route everything else to Hands.
-  if (lower.startsWith("face")) {
-    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`;
-  }
-  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
-}
+// True when the page is loaded on a touch-capable mobile device.
+const isMobile = navigator.maxTouchPoints > 1;
 
 // =============================================================================
 // HAND CONNECTIONS
@@ -106,10 +105,10 @@ const HAND_CONNECTIONS = [
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing combined Hands + FaceMesh demo...");
+    console.log("Page loaded, initializing combined HandLandmarker + FaceLandmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -123,60 +122,63 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe Hands setup ────────────────────────────────────────────────
+  // ── Browser compatibility warning ───────────────────────────────────────
+  showBrowserWarning();
 
-  const hands = new Hands({
-    locateFile: locateMediaPipeAsset
-  });
+  // ── MediaPipe Tasks API setup ────────────────────────────────────────────
+  // Both landmarkers share the same FilesetResolver (WASM loader), so we
+  // only resolve the fileset once.
 
-  hands.setOptions({
-    maxNumHands: desiredMaxHands,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-    modelComplexity: 0
-  });
+  const { FilesetResolver, HandLandmarker, FaceLandmarker } = mpVision;
+
+  let handLandmarker;
+  let faceLandmarker;
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: desiredMaxHands
+    });
+
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  } catch (err) {
+    console.error("Failed to load AI models:", err);
+    showError(new Error(
+      "Failed to load AI models. " +
+      "On Android, open this page in Chrome for best compatibility. " +
+      err.message
+    ));
+    return;
+  }
 
   // Arrays that store the most recent results from each model.
   let handResults = [];
   let faceResults = [];
 
-  hands.onResults(function (results) {
-    handResults = results.multiHandLandmarks || [];
-    if (debugMode) {
-      console.log(`Hands: ${handResults.length} detected.`);
-    }
-  });
-
   if (debugMode) {
-    console.log("MediaPipe Hands initialised.");
-  }
-
-  // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
-
-  const faceMesh = new FaceMesh({
-    locateFile: locateMediaPipeAsset
-  });
-
-  faceMesh.setOptions({
-    maxNumFaces: 1,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
-
-  faceMesh.onResults(function (results) {
-    faceResults = results.multiFaceLandmarks || [];
-    if (debugMode) {
-      console.log(`Faces: ${faceResults.length} detected.`);
-    }
-  });
-
-  if (debugMode) {
-    console.log("MediaPipe FaceMesh initialised.");
+    console.log("MediaPipe HandLandmarker and FaceLandmarker initialised.");
   }
 
   /**
-   * setupHandCountToggle — wires the 1/2-hands selector to the Hands model
+   * setupHandCountToggle — wires the 1/2-hands selector to the HandLandmarker
    * so users can switch tracking mode without reloading the page.
+   * Recreates the HandLandmarker with the new numHands value.
    */
   function setupHandCountToggle() {
     const select = document.getElementById("handCountSelect");
@@ -185,14 +187,26 @@ window.onload = function () {
     select.value = String(desiredMaxHands);
 
     select.onchange = async () => {
-      const parsed = Number.parseInt(select.value, 10);
-      const nextMaxHands = parsed === 2 ? 2 : 1;
+      const nextMaxHands = parseInt(select.value, 10) === 2 ? 2 : 1;
       desiredMaxHands = nextMaxHands;
 
       try {
-        await hands.setOptions({ maxNumHands: desiredMaxHands });
+        const vision = await FilesetResolver.forVisionTasks(
+          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+        );
+        const updated = await HandLandmarker.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath:
+              "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+            delegate: "GPU"
+          },
+          runningMode: "VIDEO",
+          numHands: desiredMaxHands
+        });
+        handLandmarker.close();
+        handLandmarker = updated;
         if (debugMode) {
-          console.log(`Updated maxNumHands to ${desiredMaxHands}.`);
+          console.log(`Updated numHands to ${desiredMaxHands}.`);
         }
       } catch (err) {
         console.error("Failed to update hand tracking mode:", err);
@@ -214,6 +228,9 @@ window.onload = function () {
    * startCamera — opens the webcam with an optional specific device and
    * starts the per-frame loop that feeds images to both models.
    *
+   * On mobile devices the resolution is capped to ≤480×360 at ≤20 fps to
+   * prevent overloading mid-range Android GPU/CPU.
+   *
    * @param {string} [deviceId] — exact device ID to open, or omit / pass ""
    *                              to let the browser choose the default camera.
    */
@@ -225,7 +242,14 @@ window.onload = function () {
       currentStream = null;
     }
 
-    const videoConstraints = {
+    // Cap resolution and frame rate on mobile to prevent the WASM/WebGL
+    // backend from being overloaded by full-resolution camera streams.
+    const videoConstraints = isMobile ? {
+      width:      { ideal: 320, max: 480 },
+      height:     { ideal: 240, max: 360 },
+      frameRate:  { ideal: 15, max: 20 },
+      facingMode: { ideal: "user" }
+    } : {
       width:      { ideal: 640 },
       height:     { ideal: 480 },
       facingMode: { ideal: "user" }
@@ -284,21 +308,23 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to both MediaPipe models on
-   * every animation tick. Stops automatically when frameLoopActive is false.
-   *
-   * The sends are intentionally sequential to avoid runtime module conflicts
-   * observed with parallel Promise.all() execution in legacy solution builds.
+   * frameLoop — runs both HandLandmarker and FaceLandmarker on the current
+   * video frame on every animation tick. detectForVideo is synchronous in the
+   * Tasks API. Stops automatically when frameLoopActive is false.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
       try {
+        const nowMs = performance.now();
         if (debugMode) {
-          console.log("Sending frame to Hands, then FaceMesh...");
+          console.log("Running HandLandmarker and FaceLandmarker on frame...");
         }
-        await hands.send({ image: video });
-        await faceMesh.send({ image: video });
+        const handResult = handLandmarker.detectForVideo(video, nowMs);
+        handResults = handResult.landmarks;
+
+        const faceResult = faceLandmarker.detectForVideo(video, nowMs);
+        faceResults = faceResult.faceLandmarks;
       } catch (err) {
         console.error("Frame processing error:", err);
       }
@@ -480,17 +506,36 @@ window.onload = function () {
   }
 
   /**
-   * showError — displays a human-readable camera error on the page so that
+   * showBrowserWarning — reveals the #browserWarning banner when the page
+   * is opened in Samsung Internet or a non-Chromium mobile browser.
+   * These browsers may restrict the WebGL/WASM backend used by the model.
+   */
+  function showBrowserWarning() {
+    const ua = navigator.userAgent;
+    const isSamsung         = /SamsungBrowser/i.test(ua);
+    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
+    if (!isSamsung && !isMobileNonChrome) return;
+    const el = document.getElementById("browserWarning");
+    if (!el) return;
+    el.textContent =
+      "For best results on Android, open this page in Chrome. " +
+      "Samsung Internet and other non-Chromium browsers may not support " +
+      "the AI models used in these demos.";
+    el.style.display = "block";
+  }
+
+  /**
+   * showError — displays a human-readable error on the page so that
    * mobile users who cannot open DevTools can still see what went wrong.
    *
-   * @param {Error} err - The error thrown by getUserMedia.
+   * @param {Error} err - The error to display.
    */
   function showError(err) {
     const el = document.getElementById("errorMessage");
     if (!el) return;
     el.textContent = err.name === "NotAllowedError"
       ? "Camera access was denied. Please allow camera permission and reload."
-      : `Camera error: ${err.message || err.name}. Try reloading or use HTTPS.`;
+      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
     el.style.display = "block";
   }
 };

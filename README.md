@@ -183,7 +183,7 @@ Detect up to two hands in your webcam feed and draw the 21 landmark points per h
 Map 468 facial landmarks onto a detected face, with distinct colours for the eyes, eyebrows, nose, lips, and irises.
 
 **What you see:**
-- 468–478 coloured dots spread across the full face surface (468 base landmarks + 10 iris points when `refineLandmarks: true`)
+- 468–478 coloured dots spread across the full face surface (468 base landmarks + 10 iris points, all included by default)
 - Region-specific colouring (blue = eyes, yellow = eyebrows, red = lips, purple = nose, cyan = irises)
 - A count of faces currently detected in the corner
 
@@ -217,15 +217,16 @@ Run both models on the same webcam stream in a split-screen canvas (raw feed on 
 > **📐 Concept Sidebar: Running Two Models Per Frame**
 >
 > This demo uses two loops:
-> - **Inference loop** (`frameLoop`) sends each frame to Hands first, then FaceMesh, using `await`.
+> - **Inference loop** (`frameLoop`) calls `detectForVideo` on both HandLandmarker and FaceLandmarker using `performance.now()` as the timestamp.
 > - **Render loop** (`renderLoop`) redraws at display refresh rate using the latest stored results.
 >
 > ```js
-> await hands.send({ image: video });
-> await faceMesh.send({ image: video });
+> const nowMs = performance.now();
+> handResults = handLandmarker.detectForVideo(video, nowMs).landmarks;
+> faceResults = faceLandmarker.detectForVideo(video, nowMs).faceLandmarks;
 > ```
 >
-> Sequential sends are intentional for stability in this combined legacy-solution setup.
+> Both calls are synchronous in the Tasks API — no `await` needed. The two landmarkers are independent instances so they can be called with the same timestamp.
 
 > **🖐️ Hand Count Control (Demo 3)**
 >
@@ -416,11 +417,11 @@ Before writing code for a new project idea, use these resources to explore what 
 
 ## Usage Notes
 
-1. All models are loaded from the [jsDelivr CDN](https://www.jsdelivr.com/) — an internet connection is required.
+1. All models are loaded from Google's CDN (`storage.googleapis.com`) and the [jsDelivr CDN](https://www.jsdelivr.com/) — an internet connection is required.
 2. Webcam access requires the browser to be served over HTTPS, or from `localhost`.
 3. MediaPipe runs entirely client-side. No video data is sent to any server.
-4. For best performance, use Chrome or Edge on a reasonably modern device.
-5. To use a sketch in OpenProcessing, paste the `sketch.js` contents into a new sketch and add the MediaPipe CDN `<script>` tags in the OpenProcessing sketch settings.
+4. For best performance, use **Chrome** or **Edge** on a reasonably modern device. On Android, Chrome is strongly recommended.
+5. To use a sketch in OpenProcessing, paste the `sketch.js` contents into a new sketch and add the `@mediapipe/tasks-vision` CDN `<script>` tag in the OpenProcessing sketch settings.
 
 ---
 
@@ -431,6 +432,8 @@ Before writing code for a new project idea, use these resources to explore what 
 3. **Old behavior after code changes:** hard refresh with `Ctrl+F5` to clear cached scripts.
 4. **Console message about async listener / `installHook.js`:** this is usually from a browser extension, not the demo code.
 5. **404 for `/.well-known/appspecific/com.chrome.devtools.json`:** harmless Chrome/DevTools probe, safe to ignore.
+6. **Blank canvas on Android (Samsung Internet or non-Chrome):** a yellow banner is shown recommending Chrome. Open the page in **Chrome for Android** — the demos use a WebGL2 delegate that runs reliably on Chromium-based browsers.
+7. **AI model fails to load (network error):** the models are fetched from `storage.googleapis.com`. Ensure your device has internet access and the page is served over HTTPS.
 
 ---
 

@@ -31,9 +31,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Demo 3 — Hands and Face Combined | MediaPipe Demos</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js"></script>
   <script defer src="sketch.js"></script>
   <style>
     html, body {
@@ -131,6 +129,19 @@
       max-width: 600px;
       text-align: center;
     }
+
+    #browserWarning {
+      display: none;
+      margin: 0.5rem 1rem 1rem;
+      padding: 0.6rem 1rem;
+      background: #2a2000;
+      border: 1px solid #7a5f00;
+      border-radius: 6px;
+      color: #fde68a;
+      font-size: 0.85rem;
+      max-width: 600px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -140,6 +151,7 @@
     <label for="cameraSelect">Camera:</label>
     <select id="cameraSelect"></select>
   </div>
+  <p id="browserWarning"></p>
   <p id="errorMessage"></p>
   <div class="camera-controls">
     <label for="handCountSelect">Hands:</label>

@@ -10,20 +10,20 @@
 //
 // PURPOSE
 // -------
-// This sketch demonstrates how to use MediaPipe Hands to detect and track
-// hand landmarks in real time using your webcam. Up to two hands are tracked
-// simultaneously. For each hand, 21 landmark points are returned — one per
-// knuckle, fingertip, and palm joint.
+// This sketch demonstrates how to use MediaPipe HandLandmarker (Tasks API) to
+// detect and track hand landmarks in real time using your webcam. Up to two
+// hands are tracked simultaneously. For each hand, 21 landmark points are
+// returned — one per knuckle, fingertip, and palm joint.
 //
 // Landmarks are drawn as green dots directly over the webcam feed. The hand
 // skeleton (connections between adjacent joints) is drawn in a lighter green.
 //
-// WHAT IS MediaPipe HANDS?
-// ------------------------
-// MediaPipe Hands is a machine-learning model from Google that analyses each
-// video frame and returns the 3-D positions of 21 key points on each hand it
-// detects. The model runs entirely in the browser — no data ever leaves your
-// device.
+// WHAT IS THE MEDIAPIPE TASKS API?
+// ---------------------------------
+// This demo uses @mediapipe/tasks-vision (HandLandmarker), the current
+// generation of MediaPipe for the web. It uses a WebGL2 delegate by default
+// (falling back to WASM), which runs reliably on Chrome for Android and
+// Samsung Internet 14+.
 //
 // The 21 landmarks are numbered 0–20:
 //   0  = WRIST
@@ -38,12 +38,14 @@
 // to the camera). To convert to pixel coordinates, multiply x by the canvas
 // width and y by the canvas height.
 //
-// WHAT IS THE CAMERA UTILITY?
-// ---------------------------
-// @mediapipe/camera_utils provides a Camera class that continuously captures
-// frames from your webcam and calls an onFrame callback. In that callback we
-// pass the current video frame to the Hands model for processing. This loop
-// runs at the camera's frame rate (typically 30 fps).
+// ANDROID / SAMSUNG NOTE
+// ----------------------
+// Three improvements have been applied for mobile compatibility:
+//   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
+//   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
+//      GPU/CPU on mid-range Android devices.
+//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
+//      browser is detected, recommending Chrome for Android.
 //
 // DEBUGGING
 // ---------
@@ -66,6 +68,9 @@ const SKELETON_COLOR = "rgba(74, 222, 128, 0.5)";
 
 // Radius of each landmark dot in pixels.
 const DOT_RADIUS = 6;
+
+// True when the page is loaded on a touch-capable mobile device.
+const isMobile = navigator.maxTouchPoints > 1;
 
 // =============================================================================
 // HAND CONNECTIONS
@@ -93,10 +98,10 @@ const HAND_CONNECTIONS = [
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing MediaPipe Hands demo...");
+    console.log("Page loaded, initializing MediaPipe HandLandmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -110,42 +115,46 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe Hands setup ────────────────────────────────────────────────
+  // ── Browser compatibility warning ───────────────────────────────────────
+  // Shown when Samsung Internet or a non-Chromium mobile browser is detected.
+  // These browsers may block the WebAssembly/WebGL delegate used by the model.
+  showBrowserWarning();
 
-  // The Hands model is loaded from the jsDelivr CDN. locateFile tells
-  // MediaPipe where to find its WebAssembly and model binary files.
-  const hands = new Hands({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
-  });
+  // ── MediaPipe HandLandmarker setup (Tasks API) ───────────────────────────
+  // HandLandmarker uses a WebGL2 delegate by default (falls back to WASM),
+  // which runs reliably on Chrome for Android and Samsung Internet 14+.
 
-  hands.setOptions({
-    maxNumHands: 2,          // detect up to two hands at once
-    minDetectionConfidence: 0.5,  // confidence threshold to start tracking a hand
-    minTrackingConfidence: 0.5,   // confidence threshold to keep tracking once found
-    modelComplexity: 0       // 0 = lite (faster), 1 = full (more accurate)
-  });
+  const { FilesetResolver, HandLandmarker } = mpVision;
 
-  // Store the most recent hand results so draw() can access them.
+  let handLandmarker;
+  try {
+    const vision = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+    );
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2
+    });
+  } catch (err) {
+    console.error("Failed to load HandLandmarker:", err);
+    showError(new Error(
+      "Failed to load AI model. " +
+      "On Android, open this page in Chrome for best compatibility. " +
+      err.message
+    ));
+    return;
+  }
+
+  // Store the most recent hand results so drawFrame() can access them.
   let handResults = [];
 
-  // onResults is called by MediaPipe after every frame is processed.
-  // results.multiHandLandmarks is an array of hands, each containing
-  // 21 landmark objects with { x, y, z } properties.
-  hands.onResults(function (results) {
-    if (results.multiHandLandmarks) {
-      handResults = results.multiHandLandmarks;
-      if (debugMode) {
-        console.log(`Detected ${handResults.length} hand(s).`);
-      }
-    } else {
-      // No hands in this frame — clear stored results.
-      handResults = [];
-    }
-  });
-
   if (debugMode) {
-    console.log("MediaPipe Hands initialised.");
+    console.log("MediaPipe HandLandmarker initialised.");
   }
 
   // ── Camera management ────────────────────────────────────────────────────
@@ -158,7 +167,10 @@ window.onload = function () {
 
   /**
    * startCamera — opens the webcam with an optional specific device and
-   * starts the per-frame loop that feeds images to the Hands model.
+   * starts the per-frame loop that feeds images to the HandLandmarker model.
+   *
+   * On mobile devices the resolution is capped to ≤480×360 at ≤20 fps to
+   * prevent overloading mid-range Android GPU/CPU.
    *
    * @param {string} [deviceId] — exact device ID to open, or omit / pass ""
    *                              to let the browser choose the default camera.
@@ -172,7 +184,14 @@ window.onload = function () {
       currentStream = null;
     }
 
-    const videoConstraints = {
+    // Cap resolution and frame rate on mobile to prevent the WASM/WebGL
+    // backend from being overloaded by full-resolution camera streams.
+    const videoConstraints = isMobile ? {
+      width:      { ideal: 320, max: 480 },
+      height:     { ideal: 240, max: 360 },
+      frameRate:  { ideal: 15, max: 20 },
+      facingMode: { ideal: "user" }
+    } : {
       width:      { ideal: 640 },
       height:     { ideal: 480 },
       facingMode: { ideal: "user" }
@@ -229,16 +248,24 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to the Hands model on every
-   * animation tick. Stops automatically when frameLoopActive is false.
+   * frameLoop — runs the HandLandmarker on the current video frame on every
+   * animation tick and stores the results for renderLoop to draw.
+   * detectForVideo is synchronous in the Tasks API, so no await is needed.
+   * Stops automatically when frameLoopActive is false.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
       if (debugMode) {
-        console.log("Sending frame to Hands model...");
+        console.log("Running HandLandmarker on frame...");
       }
-      await hands.send({ image: video });
+      try {
+        const result = handLandmarker.detectForVideo(video, performance.now());
+        // result.landmarks is an array of hands, each an array of 21 {x,y,z}
+        handResults = result.landmarks;
+      } catch (err) {
+        console.error("Hand detection error:", err);
+      }
     }
     requestAnimationFrame(frameLoop);
   }
@@ -291,7 +318,7 @@ window.onload = function () {
    * detected hand landmarks and skeleton connections.
    *
    * Uses video.videoWidth/Height directly so drawing is correct even if
-   * the loadedmetadata event fires after the first onResults callback.
+   * the loadedmetadata event fires after the first detection result.
    */
   function drawFrame() {
     const w = video.videoWidth;
@@ -378,17 +405,36 @@ window.onload = function () {
   }
 
   /**
-   * showError — displays a human-readable camera error on the page so that
+   * showBrowserWarning — reveals the #browserWarning banner when the page
+   * is opened in Samsung Internet or a non-Chromium mobile browser.
+   * These browsers may restrict the WebGL/WASM backend used by the model.
+   */
+  function showBrowserWarning() {
+    const ua = navigator.userAgent;
+    const isSamsung       = /SamsungBrowser/i.test(ua);
+    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
+    if (!isSamsung && !isMobileNonChrome) return;
+    const el = document.getElementById("browserWarning");
+    if (!el) return;
+    el.textContent =
+      "For best results on Android, open this page in Chrome. " +
+      "Samsung Internet and other non-Chromium browsers may not support " +
+      "the AI models used in these demos.";
+    el.style.display = "block";
+  }
+
+  /**
+   * showError — displays a human-readable error on the page so that
    * mobile users who cannot open DevTools can still see what went wrong.
    *
-   * @param {Error} err - The error thrown by getUserMedia.
+   * @param {Error} err - The error to display.
    */
   function showError(err) {
     const el = document.getElementById("errorMessage");
     if (!el) return;
     el.textContent = err.name === "NotAllowedError"
       ? "Camera access was denied. Please allow camera permission and reload."
-      : `Camera error: ${err.message || err.name}. Try reloading or use HTTPS.`;
+      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
     el.style.display = "block";
   }
 };
