@@ -391,6 +391,30 @@
     </ul>
   </div>
 
+  <!-- ── API migration note ────────────────────────────────────────────────── -->
+  <div class="framing-note" style="border-left-color: #3b82f6;">
+    <h2>MediaPipe API — Legacy Solutions vs. Tasks API</h2>
+    <p>
+      Google ships two generations of MediaPipe for the web. The demos in this
+      project use the <strong>Tasks Vision API</strong>
+      (<code>@mediapipe/tasks-vision</code>), which is the current, actively
+      maintained package. If you find older tutorials online, they may use the
+      <em>legacy Solutions API</em>
+      (<code>@mediapipe/hands</code>, <code>@mediapipe/face_mesh</code>) — that
+      API is frozen and no longer receives updates.
+    </p>
+    <ul class="question-list">
+      <li><strong>Current package:</strong> <code>@mediapipe/tasks-vision</code> — one package covers all vision tasks</li>
+      <li><strong>Legacy packages (deprecated):</strong> <code>@mediapipe/hands</code>, <code>@mediapipe/face_mesh</code>, <code>@mediapipe/pose</code>, etc.</li>
+      <li><strong>Key change:</strong> replace <code>new Hands()</code> + <code>onResults()</code> callback with <code>HandLandmarker.createFromOptions()</code> + synchronous <code>detectForVideo()</code></li>
+      <li><strong>Result property names:</strong> <code>results.multiHandLandmarks</code> → <code>result.landmarks</code> &nbsp;|&nbsp; <code>results.multiFaceLandmarks</code> → <code>result.faceLandmarks</code></li>
+    </ul>
+    <p>
+      All five tasks on this page use the Tasks API in MediaPipe Studio, so the
+      Studio previews already reflect the current API behaviour.
+    </p>
+  </div>
+
   <!-- ── Task cards ────────────────────────────────────────────────────────── -->
   <p class="section-title">Tasks</p>
   <div class="task-grid">

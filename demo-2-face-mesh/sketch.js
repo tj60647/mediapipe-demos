@@ -18,12 +18,13 @@
 // The landmarks are drawn as coloured dots over the webcam feed, with
 // different colours highlighting specific face regions.
 //
-// WHAT IS MediaPipe FACEMESH?
-// ----------------------------
-// MediaPipe FaceMesh is a machine-learning model from Google that analyses
-// each video frame and returns the 3-D positions of 468 key points on any
-// detected face. The model runs entirely in the browser — no data leaves
-// your device.
+// WHAT IS MediaPipe FACE LANDMARKER?
+// ------------------------------------
+// MediaPipe Face Landmarker (part of the Tasks Vision API) is a
+// machine-learning model from Google that analyses each video frame and
+// returns the 3-D positions of 478 key points on any detected face (468 face
+// surface points + 10 iris points). The model runs entirely in the browser —
+// no data leaves your device.
 //
 // Each landmark has x, y, and z properties:
 //   x, y — normalised position (0.0–1.0 relative to frame width/height)
@@ -41,8 +42,24 @@
 //   Irises      — cyan        (#67e8f9)
 //   General     — white       (rgba 200,200,200)
 //
-// The region index arrays below come from the MediaPipe FaceMesh
+// The region index arrays below come from the MediaPipe Face Landmarker
 // canonical face model documentation.
+//
+// HOW THE TASKS API DIFFERS FROM THE LEGACY SOLUTIONS API
+// --------------------------------------------------------
+// This demo uses @mediapipe/tasks-vision instead of the deprecated
+// @mediapipe/face_mesh package. Key differences:
+//
+//   Legacy pattern                Tasks API pattern
+//   ─────────────────────────     ──────────────────────────────────────
+//   new FaceMesh({ locateFile })  FaceLandmarker.createFromOptions(...)
+//   faceMesh.setOptions(...)      options passed to createFromOptions
+//   faceMesh.onResults(callback)  result returned by detectForVideo(...)
+//   await faceMesh.send(...)      result = landmarker.detectForVideo(video, ts)
+//   results.multiFaceLandmarks    result.faceLandmarks
+//
+// Iris landmarks (indices 468–477) are included automatically in the
+// Face Landmarker model — no refineLandmarks option is needed.
 //
 // DEBUGGING
 // ---------
@@ -127,10 +144,10 @@ const REGION_COLORS = {
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing MediaPipe FaceMesh demo...");
+    console.log("Page loaded, initializing MediaPipe Face Landmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -144,42 +161,58 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
+  // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
 
-  // The FaceMesh model is loaded from the jsDelivr CDN. locateFile tells
-  // MediaPipe where to find its WebAssembly and model binary files.
-  const faceMesh = new FaceMesh({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`
-  });
+  const { FaceLandmarker, FilesetResolver } = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
+  );
 
-  faceMesh.setOptions({
-    maxNumFaces: 1,               // track one face (increase for multi-face)
-    refineLandmarks: true,        // enable iris landmarks (indices 468–477)
-    minDetectionConfidence: 0.5,  // confidence needed to detect a face
-    minTrackingConfidence: 0.5    // confidence needed to keep tracking it
-  });
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+  );
 
-  // Store the most recent face results so drawFrame() can access them.
-  let faceResults = [];
+  // ── MediaPipe FaceLandmarker setup ───────────────────────────────────────
+  // numFaces replaces maxNumFaces. Iris landmarks (indices 468–477) are
+  // included automatically in the float16 model — no refineLandmarks option
+  // is needed. The GPU delegate is tried first; CPU is the fallback.
 
-  // onResults is called by MediaPipe after every frame is processed.
-  // results.multiFaceLandmarks is an array of faces, each containing
-  // 468+ landmark objects with { x, y, z } properties.
-  faceMesh.onResults(function (results) {
-    if (results.multiFaceLandmarks) {
-      faceResults = results.multiFaceLandmarks;
-      if (debugMode) {
-        console.log(`Detected ${faceResults.length} face(s).`);
-      }
-    } else {
-      faceResults = [];
-    }
-  });
+  let faceLandmarker;
+  try {
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
+          "/face_landmarker/float16/latest/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1              // track one face (increase for multi-face)
+    });
+  } catch (gpuErr) {
+    console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
+          "/face_landmarker/float16/latest/face_landmarker.task",
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  }
 
   if (debugMode) {
-    console.log("MediaPipe FaceMesh initialised.");
+    console.log("FaceLandmarker ready.");
   }
+
+  // Store the most recent detection results so the render loop can read them.
+  // result.faceLandmarks is an array of faces; each face is an array of 478
+  // { x, y, z } objects (468 face points + 10 iris points).
+  let faceResults = [];
+
+  // Monotonically increasing timestamp required by detectForVideo.
+  let lastTimestamp = -1;
 
   // ── Camera management ────────────────────────────────────────────────────
 
@@ -249,16 +282,25 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to the FaceMesh model on
-   * every animation tick. Stops automatically when frameLoopActive is false.
+   * frameLoop — runs the FaceLandmarker on the current video frame on every
+   * animation tick. detectForVideo is synchronous and returns results
+   * immediately. The timestamp guard ensures the value always increases.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      if (debugMode) {
-        console.log("Sending frame to FaceMesh model...");
+      const ts = performance.now();
+      if (ts > lastTimestamp) {
+        lastTimestamp = ts;
+        if (debugMode) {
+          console.log("Running FaceLandmarker on current frame...");
+        }
+        const result = faceLandmarker.detectForVideo(video, ts);
+        faceResults = result.faceLandmarks ?? [];
+        if (debugMode) {
+          console.log(`Detected ${faceResults.length} face(s).`);
+        }
       }
-      await faceMesh.send({ image: video });
     }
     requestAnimationFrame(frameLoop);
   }
@@ -293,14 +335,12 @@ window.onload = function () {
     select.onchange = () => startCamera(select.value);
   }
 
-  // Start with the default camera, then enumerate devices for the selector.
-  // Enumerate regardless of whether the initial stream succeeded so that
-  // users can try a different camera if the default one failed.
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  // Initialise the camera. Enumerate devices afterwards so that the camera
+  // selector shows real labels (requires permission to have been granted).
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  populateCameraSelect(activeId);
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -309,7 +349,7 @@ window.onload = function () {
    * detected face landmarks coloured by facial region.
    *
    * Uses video.videoWidth/Height directly so drawing is correct even if
-   * the loadedmetadata event fires after the first onResults callback.
+   * the loadedmetadata event fires before the first detectForVideo call.
    */
   function drawFrame() {
     const w = video.videoWidth;

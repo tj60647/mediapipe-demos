@@ -10,9 +10,9 @@
   ============================================================================
 
   PURPOSE
-  This is the HTML wrapper for the Demo 1 hand-tracking sketch. It loads the
-  MediaPipe Hands library and camera utilities from a CDN, then loads
-  sketch.js which contains all of the demo code.
+  This is the HTML wrapper for the Demo 1 hand-tracking sketch. sketch.js
+  loads the MediaPipe Tasks Vision library via dynamic import (no additional
+  <script> tag is needed here) and runs all demo logic.
 
   HOW TO USE
   Open this file in any modern browser (Chrome or Edge recommended).
@@ -28,10 +28,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Demo 1 — Hand Tracking | MediaPipe Demos</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils@0.3.1675466862"></script>
   <script defer src="sketch.js"></script>
-  <!-- locateFile inside sketch.js is pinned to the same version as the script tag above -->
   <style>
     html, body {
       margin: 0;
