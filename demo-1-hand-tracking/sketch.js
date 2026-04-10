@@ -18,12 +18,12 @@
 // Landmarks are drawn as green dots directly over the webcam feed. The hand
 // skeleton (connections between adjacent joints) is drawn in a lighter green.
 //
-// WHAT IS MediaPipe HANDS?
-// ------------------------
-// MediaPipe Hands is a machine-learning model from Google that analyses each
-// video frame and returns the 3-D positions of 21 key points on each hand it
-// detects. The model runs entirely in the browser — no data ever leaves your
-// device.
+// WHAT IS MediaPipe HAND LANDMARKER?
+// -----------------------------------
+// MediaPipe Hand Landmarker (part of the Tasks Vision API) is a
+// machine-learning model from Google that analyses each video frame and
+// returns the 3-D positions of 21 key points on each hand it detects. The
+// model runs entirely in the browser — no data ever leaves your device.
 //
 // The 21 landmarks are numbered 0–20:
 //   0  = WRIST
@@ -38,12 +38,18 @@
 // to the camera). To convert to pixel coordinates, multiply x by the canvas
 // width and y by the canvas height.
 //
-// WHAT IS THE CAMERA UTILITY?
-// ---------------------------
-// @mediapipe/camera_utils provides a Camera class that continuously captures
-// frames from your webcam and calls an onFrame callback. In that callback we
-// pass the current video frame to the Hands model for processing. This loop
-// runs at the camera's frame rate (typically 30 fps).
+// HOW THE TASKS API DIFFERS FROM THE LEGACY SOLUTIONS API
+// --------------------------------------------------------
+// This demo uses @mediapipe/tasks-vision (the current API) instead of the
+// deprecated @mediapipe/hands package. Key differences:
+//
+//   Legacy pattern                Tasks API pattern
+//   ─────────────────────────     ──────────────────────────────────────
+//   new Hands({ locateFile })     HandLandmarker.createFromOptions(...)
+//   hands.setOptions(...)         options passed to createFromOptions
+//   hands.onResults(callback)     result returned by detectForVideo(...)
+//   await hands.send({ image })   result = landmarker.detectForVideo(video, ts)
+//   results.multiHandLandmarks    result.landmarks
 //
 // DEBUGGING
 // ---------
@@ -93,10 +99,10 @@ const HAND_CONNECTIONS = [
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing MediaPipe Hands demo...");
+    console.log("Page loaded, initializing MediaPipe Hand Landmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -110,43 +116,63 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe Hands setup ────────────────────────────────────────────────
+  // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
+  // The tasks-vision library is loaded via dynamic import — no extra <script>
+  // tag is needed in index.html. The .mjs bundle is an ES module that exposes
+  // HandLandmarker, FilesetResolver, and other Tasks API classes.
 
-  // The Hands model is loaded from the jsDelivr CDN. locateFile tells
-  // MediaPipe where to find its WebAssembly and model binary files.
-  const hands = new Hands({
-    locateFile: (file) =>
-      `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`
-  });
+  const { HandLandmarker, FilesetResolver } = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
+  );
 
-  hands.setOptions({
-    maxNumHands: 2,          // detect up to two hands at once
-    minDetectionConfidence: 0.5,  // confidence threshold to start tracking a hand
-    minTrackingConfidence: 0.5,   // confidence threshold to keep tracking once found
-    modelComplexity: 1       // 0 = lite (faster), 1 = full (more accurate)
-  });
+  // FilesetResolver downloads the WebAssembly runtime for Tasks Vision.
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+  );
 
-  // Store the most recent hand results so draw() can access them.
-  let handResults = [];
+  // ── MediaPipe HandLandmarker setup ───────────────────────────────────────
+  // createFromOptions replaces new Hands() + setOptions() from the legacy API.
+  // The .task file is the model binary — fetched from Google's CDN on first
+  // load, then cached by the browser. delegate: "GPU" uses WebGL acceleration;
+  // the catch block retries with CPU if GPU is unavailable.
 
-  // onResults is called by MediaPipe after every frame is processed.
-  // results.multiHandLandmarks is an array of hands, each containing
-  // 21 landmark objects with { x, y, z } properties.
-  hands.onResults(function (results) {
-    if (results.multiHandLandmarks) {
-      handResults = results.multiHandLandmarks;
-      if (debugMode) {
-        console.log(`Detected ${handResults.length} hand(s).`);
-      }
-    } else {
-      // No hands in this frame — clear stored results.
-      handResults = [];
-    }
-  });
+  let handLandmarker;
+  try {
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
+          "/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2              // detect up to two hands at once
+    });
+  } catch (gpuErr) {
+    console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
+          "/hand_landmarker/float16/latest/hand_landmarker.task",
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numHands: 2
+    });
+  }
 
   if (debugMode) {
-    console.log("MediaPipe Hands initialised.");
+    console.log("HandLandmarker ready.");
   }
+
+  // Store the most recent detection results so the render loop can read them.
+  // result.landmarks is an array of hands; each hand is an array of 21 { x, y, z }.
+  let handResults = [];
+
+  // detectForVideo requires a monotonically increasing timestamp (ms).
+  // Track the last value so we never pass the same timestamp twice.
+  let lastTimestamp = -1;
 
   // ── Camera management ────────────────────────────────────────────────────
 
@@ -218,16 +244,26 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to the Hands model on every
-   * animation tick. Stops automatically when frameLoopActive is false.
+   * frameLoop — runs the HandLandmarker on the current video frame on every
+   * animation tick. detectForVideo is synchronous — it returns results
+   * immediately without a callback. The timestamp guard ensures the value
+   * always increases, which the Tasks API requires.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      if (debugMode) {
-        console.log("Sending frame to Hands model...");
+      const ts = performance.now();
+      if (ts > lastTimestamp) {
+        lastTimestamp = ts;
+        if (debugMode) {
+          console.log("Running HandLandmarker on current frame...");
+        }
+        const result = handLandmarker.detectForVideo(video, ts);
+        handResults = result.landmarks ?? [];
+        if (debugMode) {
+          console.log(`Detected ${handResults.length} hand(s).`);
+        }
       }
-      await hands.send({ image: video });
     }
     requestAnimationFrame(frameLoop);
   }
@@ -264,14 +300,12 @@ window.onload = function () {
     select.onchange = () => startCamera(select.value);
   }
 
-  // Start with the default camera, then enumerate devices for the selector.
-  // Enumerate regardless of whether the initial stream succeeded so that
-  // users can try a different camera if the default one failed.
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  // Initialise the camera. Enumerate devices afterwards so that the camera
+  // selector shows real labels (requires permission to have been granted).
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  populateCameraSelect(activeId);
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -280,7 +314,7 @@ window.onload = function () {
    * detected hand landmarks and skeleton connections.
    *
    * Uses video.videoWidth/Height directly so drawing is correct even if
-   * the loadedmetadata event fires after the first onResults callback.
+   * the loadedmetadata event fires before the first detectForVideo call.
    */
   function drawFrame() {
     const w = video.videoWidth;

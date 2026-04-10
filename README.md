@@ -68,14 +68,16 @@ This project links two main pieces:
 
 ### MediaPipe
 
-[MediaPipe](https://google.github.io/mediapipe/) provides pre-trained models for common computer-vision tasks. In this project we use two:
+[MediaPipe](https://ai.google.dev/edge/mediapipe/solutions/guide) provides pre-trained models for common computer-vision tasks via the **Tasks Vision API** (`@mediapipe/tasks-vision`). In this project we use two tasks:
 
-| Model | What it detects | Landmarks |
+| Task | What it detects | Landmarks |
 |---|---|---|
-| **Hands** | Up to two hands | 21 points per hand (wrist, knuckles, fingertips) |
-| **FaceMesh** | Up to 1 face (configurable) | 468 points covering the full face surface |
+| **Hand Landmarker** | Up to two hands | 21 points per hand (wrist, knuckles, fingertips) |
+| **Face Landmarker** | Up to 1 face (configurable) | 478 points covering the full face surface (468 face + 10 iris) |
 
 Each landmark has normalised `x`, `y`, and `z` coordinates (0.0–1.0 relative to the frame). To draw on a canvas, multiply `x` by the canvas width and `y` by the canvas height.
+
+> **⚠️ Legacy API note:** Many tutorials found online still use the deprecated `@mediapipe/hands` and `@mediapipe/face_mesh` packages (the "Solutions API"). Those packages are frozen — they no longer receive updates from Google. The demos in this project have been updated to the current `@mediapipe/tasks-vision` package. The landmark shape (`{x, y, z}`) is identical between the two APIs, so interaction and drawing code is unchanged; only the initialisation pattern differs.
 
 ### OpenProcessing
 
@@ -203,7 +205,7 @@ Detect up to two hands in your webcam feed and draw the 21 landmark points per h
 Map 468 facial landmarks onto a detected face, with distinct colours for the eyes, eyebrows, nose, lips, and irises.
 
 **What you see:**
-- 468–478 coloured dots spread across the full face surface (468 base landmarks + 10 iris points when `refineLandmarks: true`)
+- 468–478 coloured dots spread across the full face surface (468 base landmarks + 10 iris points, included automatically by the Face Landmarker model)
 - Region-specific colouring (blue = eyes, yellow = eyebrows, red = lips, purple = nose, cyan = irises)
 - A count of faces currently detected in the corner
 
@@ -211,7 +213,7 @@ Map 468 facial landmarks onto a detected face, with distinct colours for the eye
 
 > **📐 Concept Sidebar: Landmark Indices and Sub-regions**
 >
-> The 468 face landmarks are numbered 0–467 (plus indices 468–477 for iris points when `refineLandmarks: true` is set). MediaPipe's canonical face model diagram shows which index maps to which facial feature.
+> The 478 face landmarks are numbered 0–467 for the face surface, plus indices 468–477 for iris points (included automatically by the Face Landmarker). MediaPipe's canonical face model diagram shows which index maps to which facial feature.
 >
 > You can isolate any region by checking whether an index belongs to a predefined `Set`:
 > ```js
@@ -237,15 +239,15 @@ Run both models on the same webcam stream in a split-screen canvas (raw feed on 
 > **📐 Concept Sidebar: Running Two Models Per Frame**
 >
 > This demo uses two loops:
-> - **Inference loop** (`frameLoop`) sends each frame to Hands first, then FaceMesh, using `await`.
+> - **Inference loop** (`frameLoop`) calls both landmarkers synchronously on each frame using `detectForVideo`.
 > - **Render loop** (`renderLoop`) redraws at display refresh rate using the latest stored results.
 >
 > ```js
-> await hands.send({ image: video });
-> await faceMesh.send({ image: video });
+> const handResult = handLandmarker.detectForVideo(video, performance.now());
+> const faceResult = faceLandmarker.detectForVideo(video, performance.now());
 > ```
 >
-> Sequential sends are intentional for stability in this combined legacy-solution setup.
+> Both calls are synchronous — no callbacks or `await` needed.
 
 > **🖐️ Hand Count Control (Demo 3)**
 >

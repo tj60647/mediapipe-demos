@@ -23,13 +23,13 @@
 //
 // ARCHITECTURE
 // ------------
-// Both models process the same video frame independently. Each model has its
-// own onResults callback that stores the latest results. A shared drawResults()
-// function reads both stored results and renders a single combined frame.
+// Both models process the same video frame independently. The results of each
+// detectForVideo call are stored and read by a shared drawResults() function
+// that renders a single combined frame.
 //
 // The pipeline runs two independent loops:
-//   frameLoop  — sends each camera frame to both models sequentially
-//                (Hands first, then FaceMesh) at the model inference rate.
+//   frameLoop  — calls detectForVideo on both landmarkers sequentially for
+//                each camera frame at the model inference rate.
 //   renderLoop — calls drawResults() on every requestAnimationFrame tick
 //                (~60 fps), keeping the canvas smooth regardless of inference
 //                speed. It always uses the most recently stored results.
@@ -74,20 +74,6 @@ const FACE_COLOR = "#f87171";  // red / coral
 // Default hand-tracking mode for Demo 3. Can be switched live in the UI.
 let desiredMaxHands = 2;
 
-// MediaPipe solution bundles use different asset filename prefixes.
-// In this combined demo, route each requested asset to the correct CDN
-// package so Hands assets are not accidentally fetched from FaceMesh paths.
-function locateMediaPipeAsset(file) {
-  const lower = file.toLowerCase();
-
-  // FaceMesh assets consistently start with "face" (e.g. face_mesh_*,
-  // face_landmark_*, face_detection_*). Route everything else to Hands.
-  if (lower.startsWith("face")) {
-    return `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619/${file}`;
-  }
-  return `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`;
-}
-
 // =============================================================================
 // HAND CONNECTIONS
 // =============================================================================
@@ -106,10 +92,10 @@ const HAND_CONNECTIONS = [
 // ENTRY POINT
 // =============================================================================
 
-window.onload = function () {
+window.onload = async function () {
 
   if (debugMode) {
-    console.log("Page loaded, initializing combined Hands + FaceMesh demo...");
+    console.log("Page loaded, initializing combined Hand + Face Landmarker demo...");
   }
 
   // ── DOM elements ────────────────────────────────────────────────────────
@@ -123,60 +109,98 @@ window.onload = function () {
     return;
   }
 
-  // ── MediaPipe Hands setup ────────────────────────────────────────────────
+  // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
 
-  const hands = new Hands({
-    locateFile: locateMediaPipeAsset
-  });
+  const { HandLandmarker, FaceLandmarker, FilesetResolver } = await import(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
+  );
 
-  hands.setOptions({
-    maxNumHands: desiredMaxHands,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5,
-    modelComplexity: 1
-  });
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
+  );
+
+  // ── Helper: create a HandLandmarker with the given hand count ────────────
+  // Used at startup and when the user changes the Hands selector live.
+
+  async function createHandLandmarker(numHands) {
+    try {
+      return await HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
+            "/hand_landmarker/float16/latest/hand_landmarker.task",
+          delegate: "GPU"
+        },
+        runningMode: "VIDEO",
+        numHands
+      });
+    } catch (gpuErr) {
+      console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+      return HandLandmarker.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
+            "/hand_landmarker/float16/latest/hand_landmarker.task",
+          delegate: "CPU"
+        },
+        runningMode: "VIDEO",
+        numHands
+      });
+    }
+  }
+
+  // ── MediaPipe HandLandmarker setup ───────────────────────────────────────
+
+  let handLandmarker = await createHandLandmarker(desiredMaxHands);
+
+  if (debugMode) {
+    console.log("HandLandmarker ready.");
+  }
+
+  // ── MediaPipe FaceLandmarker setup ───────────────────────────────────────
+
+  let faceLandmarker;
+  try {
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
+          "/face_landmarker/float16/latest/face_landmarker.task",
+        delegate: "GPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  } catch (gpuErr) {
+    console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
+          "/face_landmarker/float16/latest/face_landmarker.task",
+        delegate: "CPU"
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
+    });
+  }
+
+  if (debugMode) {
+    console.log("FaceLandmarker ready.");
+  }
 
   // Arrays that store the most recent results from each model.
   let handResults = [];
   let faceResults = [];
 
-  hands.onResults(function (results) {
-    handResults = results.multiHandLandmarks || [];
-    if (debugMode) {
-      console.log(`Hands: ${handResults.length} detected.`);
-    }
-  });
-
-  if (debugMode) {
-    console.log("MediaPipe Hands initialised.");
-  }
-
-  // ── MediaPipe FaceMesh setup ─────────────────────────────────────────────
-
-  const faceMesh = new FaceMesh({
-    locateFile: locateMediaPipeAsset
-  });
-
-  faceMesh.setOptions({
-    maxNumFaces: 1,
-    minDetectionConfidence: 0.5,
-    minTrackingConfidence: 0.5
-  });
-
-  faceMesh.onResults(function (results) {
-    faceResults = results.multiFaceLandmarks || [];
-    if (debugMode) {
-      console.log(`Faces: ${faceResults.length} detected.`);
-    }
-  });
-
-  if (debugMode) {
-    console.log("MediaPipe FaceMesh initialised.");
-  }
+  // Monotonically increasing timestamp required by detectForVideo.
+  let lastTimestamp = -1;
 
   /**
-   * setupHandCountToggle — wires the 1/2-hands selector to the Hands model
-   * so users can switch tracking mode without reloading the page.
+   * setupHandCountToggle — wires the 1/2-hands selector so users can switch
+   * tracking mode without reloading the page. The Tasks API does not support
+   * mutating options after creation, so the HandLandmarker is recreated with
+   * the new numHands value.
    */
   function setupHandCountToggle() {
     const select = document.getElementById("handCountSelect");
@@ -186,16 +210,27 @@ window.onload = function () {
 
     select.onchange = async () => {
       const parsed = Number.parseInt(select.value, 10);
-      const nextMaxHands = parsed === 2 ? 2 : 1;
-      desiredMaxHands = nextMaxHands;
+      desiredMaxHands = parsed === 2 ? 2 : 1;
+
+      // Pause inference while recreating the landmarker.
+      const wasRunning = frameLoopActive;
+      frameLoopActive = false;
+      handResults = [];
+      lastTimestamp = -1;
 
       try {
-        await hands.setOptions({ maxNumHands: desiredMaxHands });
+        if (handLandmarker) handLandmarker.close();
+        handLandmarker = await createHandLandmarker(desiredMaxHands);
         if (debugMode) {
-          console.log(`Updated maxNumHands to ${desiredMaxHands}.`);
+          console.log(`Updated numHands to ${desiredMaxHands}.`);
         }
       } catch (err) {
         console.error("Failed to update hand tracking mode:", err);
+      }
+
+      frameLoopActive = wasRunning;
+      if (frameLoopActive) {
+        requestAnimationFrame(frameLoop);
       }
     };
   }
@@ -273,23 +308,28 @@ window.onload = function () {
   }
 
   /**
-   * frameLoop — sends the current video frame to both MediaPipe models on
-   * every animation tick. Stops automatically when frameLoopActive is false.
-   *
-   * The sends are intentionally sequential to avoid runtime module conflicts
-   * observed with parallel Promise.all() execution in legacy solution builds.
+   * frameLoop — runs both landmarkers on the current video frame on every
+   * animation tick. detectForVideo is synchronous. Both models receive the
+   * same frame and their results are stored independently for the render loop.
    */
-  async function frameLoop() {
+  function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      try {
+      const ts = performance.now();
+      if (ts > lastTimestamp) {
+        lastTimestamp = ts;
         if (debugMode) {
-          console.log("Sending frame to Hands, then FaceMesh...");
+          console.log("Running HandLandmarker and FaceLandmarker on current frame...");
         }
-        await hands.send({ image: video });
-        await faceMesh.send({ image: video });
-      } catch (err) {
-        console.error("Frame processing error:", err);
+        const handResult = handLandmarker.detectForVideo(video, ts);
+        handResults = handResult.landmarks ?? [];
+
+        const faceResult = faceLandmarker.detectForVideo(video, ts);
+        faceResults = faceResult.faceLandmarks ?? [];
+
+        if (debugMode) {
+          console.log(`Hands: ${handResults.length}, Faces: ${faceResults.length}`);
+        }
       }
     }
     requestAnimationFrame(frameLoop);
@@ -325,14 +365,12 @@ window.onload = function () {
     select.onchange = () => startCamera(select.value);
   }
 
-  // Start with the default camera, then enumerate devices for the selector.
-  // Enumerate regardless of whether the initial stream succeeded so that
-  // users can try a different camera if the default one failed.
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  // Initialise the camera. Enumerate devices afterwards so that the camera
+  // selector shows real labels (requires permission to have been granted).
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  populateCameraSelect(activeId);
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 

@@ -10,9 +10,9 @@
   ============================================================================
 
   PURPOSE
-  This is the HTML wrapper for the Demo 5 face-instrument sketch. It loads
-  the MediaPipe Hands and FaceMesh libraries from a CDN, then loads sketch.js
-  which contains all of the demo code.
+  This is the HTML wrapper for the Demo 5 face-instrument sketch. sketch.js
+  loads the MediaPipe Tasks Vision library via dynamic import (no additional
+  <script> tags are needed here) and runs all demo logic.
 
   HOW TO USE
   Open this file in any modern browser (Chrome or Edge recommended).
@@ -32,8 +32,6 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Demo 5 — Face Instrument | MediaPipe Demos</title>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@0.4.1633559619"></script>
   <script defer src="sketch.js"></script>
   <style>
     html, body {
