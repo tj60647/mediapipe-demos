@@ -351,6 +351,30 @@ Turn the face into a proximity-triggered control surface. Nine named regions —
 
 ---
 
+## Project Prompts: Face + Hands
+
+If you want to keep building from the existing demos, these three directions stay close to the current face-and-hands pipeline while pushing it toward something more playful and unexpected.
+
+### Invisible Makeup Synth
+
+Use your fingers as tools to "paint" reactive effects onto your tracked face. Different facial regions can produce different visual or sonic responses, turning the piece into a performance instrument rather than a beauty filter.
+
+**Prompt:** Build a face-and-hands prototype where touching or approaching different parts of your face causes strange visual or sonic transformations. Avoid realistic makeup logic. Make it feel uncanny, theatrical, funny, or impossible.
+
+### Mouth DJ / Hand Conducted Voice Machine
+
+Use face landmarks and hand distance to control a playful voice or sound system. Opening the mouth could raise intensity, a finger near the lips could switch samples, and hand height could change pitch or reverb.
+
+**Prompt:** Design a musical or vocal instrument controlled by your face and hands together. The audience should understand that your body is the interface, but the result should be surprising rather than literal.
+
+### Self-Portrait Creature Generator
+
+Turn the face and hands into a live creature that grows extra eyes, antennae, mirrored limbs, or animated features based on tracked motion and spatial relationships.
+
+**Prompt:** Create a live self-portrait system where your face and hands are remixed into a weird character. Use tracking data to control when features appear, stretch, split, or mutate.
+
+---
+
 ## Beyond Face and Hands
 
 Once you are comfortable with the demos, there are many more MediaPipe tasks to explore. The [`beyond/index.html`](https://tj60647.github.io/mediapipe-demos/beyond/) page introduces five of them with a comparative frame — what each task detects, what it outputs, what interactions it makes possible, and where it is likely to fail.
@@ -375,7 +399,7 @@ Before you commit to implementing a new task, spend 10–15 minutes in **MediaPi
 2. **Is the output stable enough for my project?**
 3. **What settings (confidence, hand count, etc.) make it work best?**
 
-### MediaPipe Studio Session (Guided Workflow)
+### MediaPipe Studio Exploration Flow
 
 1. Open [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) in your browser.
 2. Pick one task from the list (start with **Face Landmarker** if you're new):
@@ -445,7 +469,7 @@ Every `sketch.js` in this project can be pasted directly into OpenProcessing, so
 
 ## AI Remix Workflow
 
-Students can use AI coding assistants to remix patterns across demos while keeping a stable baseline.
+You can use AI coding assistants to remix patterns across demos while keeping a stable baseline.
 
 ### Remix Recipe
 
@@ -472,7 +496,7 @@ Do not rewrite the whole file.
 Explain which landmarks, thresholds, and mappings you used.
 ```
 
-### Remix Deliverable
+### Remix Goal
 
 - [ ] One baseline demo still works exactly as before
 - [ ] One new interaction feature works reliably
