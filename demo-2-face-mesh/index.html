@@ -114,6 +114,19 @@
       outline: none;
       border-color: #666;
     }
+
+    #errorMessage {
+      display: none;
+      margin: 0.5rem 1rem 1rem;
+      padding: 0.6rem 1rem;
+      background: #2a1a1a;
+      border: 1px solid #7f1d1d;
+      border-radius: 6px;
+      color: #fca5a5;
+      font-size: 0.85rem;
+      max-width: 600px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -123,6 +136,7 @@
     <label for="cameraSelect">Camera:</label>
     <select id="cameraSelect"></select>
   </div>
+  <p id="errorMessage"></p>
   <div class="media-container">
     <video id="video" autoplay playsinline></video>
     <canvas id="canvas"></canvas>
