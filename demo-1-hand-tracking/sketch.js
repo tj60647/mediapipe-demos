@@ -118,7 +118,11 @@ window.onload = async function () {
 
   // Lightweight status banner for mobile where DevTools is unavailable.
   const statusBanner = document.createElement("div");
-  statusBanner.style.position = "fixed";
+  const statusHost = canvas.parentElement || document.body;
+  if (statusHost !== document.body && getComputedStyle(statusHost).position === "static") {
+    statusHost.style.position = "relative";
+  }
+  statusBanner.style.position = statusHost === document.body ? "fixed" : "absolute";
   statusBanner.style.left = "12px";
   statusBanner.style.top = "12px";
   statusBanner.style.zIndex = "9999";
@@ -130,7 +134,7 @@ window.onload = async function () {
   statusBanner.style.maxWidth = "min(80vw, 420px)";
   statusBanner.style.pointerEvents = "none";
   statusBanner.style.display = "none";
-  document.body.appendChild(statusBanner);
+  statusHost.appendChild(statusBanner);
 
   function showStatus(message, isError = false) {
     statusBanner.textContent = message;
