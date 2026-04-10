@@ -168,6 +168,8 @@ Detect up to two hands in your webcam feed and draw the 21 landmark points per h
 
 📂 **Sketch:** [`demo-1-hand-tracking/sketch.js`](demo-1-hand-tracking/sketch.js)
 
+🌐 **Live demo:** [Open on GitHub Pages](https://tj60647.github.io/mediapipe-demos/demo-1-hand-tracking/)
+
 🌐 **OpenProcessing:** [Try it live](https://openprocessing.org/sketch/2914727)
 
 > **📐 Concept Sidebar: Normalised Coordinates**
@@ -211,6 +213,8 @@ Map 468 facial landmarks onto a detected face, with distinct colours for the eye
 
 📂 **Sketch:** [`demo-2-face-mesh/sketch.js`](demo-2-face-mesh/sketch.js)
 
+🌐 **Live demo:** [Open on GitHub Pages](https://tj60647.github.io/mediapipe-demos/demo-2-face-mesh/)
+
 > **📐 Concept Sidebar: Landmark Indices and Sub-regions**
 >
 > The 478 face landmarks are numbered 0–467 for the face surface, plus indices 468–477 for iris points (included automatically by the Face Landmarker). MediaPipe's canonical face model diagram shows which index maps to which facial feature.
@@ -235,6 +239,8 @@ Run both models on the same webcam stream in a split-screen canvas (raw feed on 
 - Counts for both hands and faces in the corner
 
 📂 **Sketch:** [`demo-3-hands-and-face/sketch.js`](demo-3-hands-and-face/sketch.js)
+
+🌐 **Live demo:** [Open on GitHub Pages](https://tj60647.github.io/mediapipe-demos/demo-3-hands-and-face/)
 
 > **📐 Concept Sidebar: Running Two Models Per Frame**
 >
@@ -286,6 +292,8 @@ Turn landmark coordinates into interactive inputs. This demo shows four patterns
 
 📂 **Sketch:** [`demo-4-interaction/sketch.js`](demo-4-interaction/sketch.js)
 
+🌐 **Live demo:** [Open on GitHub Pages](https://tj60647.github.io/mediapipe-demos/demo-4-interaction/)
+
 > **📐 Concept Sidebar: Four Interaction Patterns**
 >
 > | Pattern | Input | Output |
@@ -324,6 +332,8 @@ Turn the face into a proximity-triggered control surface. Nine named regions —
 - The index fingertip highlighted as a larger ring
 
 📂 **Sketch:** [`demo-5-face-instrument/sketch.js`](demo-5-face-instrument/sketch.js)
+
+🌐 **Live demo:** [Open on GitHub Pages](https://tj60647.github.io/mediapipe-demos/demo-5-face-instrument/)
 
 🌐 **OpenProcessing:** [Try it live](https://openprocessing.org/sketch/2914827)
 

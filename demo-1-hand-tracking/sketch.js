@@ -182,6 +182,14 @@ window.onload = async function () {
   // Controls whether the frame loop is running.
   let frameLoopActive = false;
 
+  // Stop loops and release camera tracks when leaving the page.
+  window.addEventListener("beforeunload", () => {
+    frameLoopActive = false;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+  });
+
   /**
    * startCamera — opens the webcam with an optional specific device and
    * starts the per-frame loop that feeds images to the Hands model.

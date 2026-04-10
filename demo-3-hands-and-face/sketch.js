@@ -193,8 +193,9 @@ window.onload = async function () {
   let handResults = [];
   let faceResults = [];
 
-  // Monotonically increasing timestamp required by detectForVideo.
-  let lastTimestamp = -1;
+  // Each model keeps its own monotonic timestamp for detectForVideo.
+  let lastTimestampHand = -1;
+  let lastTimestampFace = -1;
 
   /**
    * setupHandCountToggle — wires the 1/2-hands selector so users can switch
@@ -216,7 +217,7 @@ window.onload = async function () {
       const wasRunning = frameLoopActive;
       frameLoopActive = false;
       handResults = [];
-      lastTimestamp = -1;
+      lastTimestampHand = -1;
 
       try {
         if (handLandmarker) handLandmarker.close();
@@ -244,6 +245,14 @@ window.onload = async function () {
 
   // Controls whether the frame loop is running.
   let frameLoopActive = false;
+
+  // Stop loops and release camera tracks when leaving the page.
+  window.addEventListener("beforeunload", () => {
+    frameLoopActive = false;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+  });
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -315,21 +324,23 @@ window.onload = async function () {
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      const ts = performance.now();
-      if (ts > lastTimestamp) {
-        lastTimestamp = ts;
-        if (debugMode) {
-          console.log("Running HandLandmarker and FaceLandmarker on current frame...");
-        }
-        const handResult = handLandmarker.detectForVideo(video, ts);
+      const tsHand = performance.now();
+      if (tsHand > lastTimestampHand) {
+        lastTimestampHand = tsHand;
+        const handResult = handLandmarker.detectForVideo(video, tsHand);
         handResults = handResult.landmarks ?? [];
+      }
 
-        const faceResult = faceLandmarker.detectForVideo(video, ts);
+      const tsFace = performance.now();
+      if (tsFace > lastTimestampFace) {
+        lastTimestampFace = tsFace;
+        const faceResult = faceLandmarker.detectForVideo(video, tsFace);
         faceResults = faceResult.faceLandmarks ?? [];
+      }
 
-        if (debugMode) {
-          console.log(`Hands: ${handResults.length}, Faces: ${faceResults.length}`);
-        }
+      if (debugMode) {
+        console.log("Running HandLandmarker and FaceLandmarker on current frame...");
+        console.log(`Hands: ${handResults.length}, Faces: ${faceResults.length}`);
       }
     }
     requestAnimationFrame(frameLoop);

@@ -275,13 +275,22 @@ window.onload = async function () {
   let handResults = [];
   let faceResults = [];
 
-  // Monotonically increasing timestamp required by detectForVideo.
-  let lastTimestamp = -1;
+  // Each model keeps its own monotonic timestamp for detectForVideo.
+  let lastTimestampHand = -1;
+  let lastTimestampFace = -1;
 
   // ── Camera management ────────────────────────────────────────────────────
 
   let currentStream   = null;
   let frameLoopActive = false;
+
+  // Stop loops and release camera tracks when leaving the page.
+  window.addEventListener("beforeunload", () => {
+    frameLoopActive = false;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+  });
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -343,15 +352,21 @@ window.onload = async function () {
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      const ts = performance.now();
-      if (ts > lastTimestamp) {
-        lastTimestamp = ts;
-        if (debugMode) console.log("Running HandLandmarker and FaceLandmarker...");
-        const handResult = handLandmarker.detectForVideo(video, ts);
+      const tsHand = performance.now();
+      if (tsHand > lastTimestampHand) {
+        lastTimestampHand = tsHand;
+        const handResult = handLandmarker.detectForVideo(video, tsHand);
         handResults = handResult.landmarks ?? [];
-        const faceResult = faceLandmarker.detectForVideo(video, ts);
+      }
+
+      const tsFace = performance.now();
+      if (tsFace > lastTimestampFace) {
+        lastTimestampFace = tsFace;
+        const faceResult = faceLandmarker.detectForVideo(video, tsFace);
         faceResults = faceResult.faceLandmarks ?? [];
       }
+
+      if (debugMode) console.log("Running HandLandmarker and FaceLandmarker...");
     }
     requestAnimationFrame(frameLoop);
   }

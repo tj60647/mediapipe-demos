@@ -236,6 +236,14 @@ window.onload = async function () {
   let currentStream   = null;
   let frameLoopActive = false;
 
+  // Stop loops and release camera tracks when leaving the page.
+  window.addEventListener("beforeunload", () => {
+    frameLoopActive = false;
+    if (currentStream) {
+      currentStream.getTracks().forEach(t => t.stop());
+    }
+  });
+
   /**
    * startCamera — opens the webcam with an optional specific device and
    * starts the per-frame inference and render loops.
