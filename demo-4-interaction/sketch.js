@@ -198,6 +198,36 @@ window.onload = async function () {
     return;
   }
 
+  // Lightweight status banner for mobile where DevTools is unavailable.
+  const statusBanner = document.createElement("div");
+  statusBanner.style.position = "fixed";
+  statusBanner.style.left = "12px";
+  statusBanner.style.top = "12px";
+  statusBanner.style.zIndex = "9999";
+  statusBanner.style.padding = "8px 10px";
+  statusBanner.style.borderRadius = "8px";
+  statusBanner.style.background = "rgba(0, 0, 0, 0.72)";
+  statusBanner.style.color = "#f3f4f6";
+  statusBanner.style.font = "12px/1.3 monospace";
+  statusBanner.style.maxWidth = "min(80vw, 420px)";
+  statusBanner.style.pointerEvents = "none";
+  statusBanner.style.display = "none";
+  document.body.appendChild(statusBanner);
+
+  function showStatus(message, isError = false) {
+    statusBanner.textContent = message;
+    statusBanner.style.display = "block";
+    statusBanner.style.border = isError
+      ? "1px solid rgba(248, 113, 113, 0.9)"
+      : "1px solid rgba(156, 163, 175, 0.7)";
+  }
+
+  function clearStatus() {
+    statusBanner.style.display = "none";
+  }
+
+  showStatus("Loading MediaPipe runtime...");
+
   // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
 
   const { HandLandmarker, FaceLandmarker, FilesetResolver } = await import(
@@ -212,6 +242,7 @@ window.onload = async function () {
 
   let handLandmarker;
   try {
+    showStatus("Loading hand model (GPU)...");
     handLandmarker = await HandLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
@@ -224,6 +255,7 @@ window.onload = async function () {
     });
   } catch (gpuErr) {
     console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+    showStatus("Loading hand model (CPU fallback)...");
     handLandmarker = await HandLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
@@ -244,6 +276,7 @@ window.onload = async function () {
 
   let faceLandmarker;
   try {
+    showStatus("Loading face model (GPU)...");
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
@@ -256,6 +289,7 @@ window.onload = async function () {
     });
   } catch (gpuErr) {
     console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
+    showStatus("Loading face model (CPU fallback)...");
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
@@ -300,6 +334,7 @@ window.onload = async function () {
    */
   async function startCamera(deviceId) {
     frameLoopActive = false;
+    showStatus("Requesting camera access...");
 
     if (currentStream) {
       currentStream.getTracks().forEach(t => t.stop());
@@ -315,10 +350,14 @@ window.onload = async function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
+      showStatus("Camera access failed. Check permissions and reload.", true);
       return;
     }
 
     video.srcObject = currentStream;
+    video.muted = true;
+    video.autoplay = true;
+    video.setAttribute("playsinline", "");
 
     video.onloadedmetadata = () => {
       canvas.width  = video.videoWidth;
@@ -328,8 +367,16 @@ window.onload = async function () {
       }
     };
 
-    video.play();
+    showStatus("Starting video playback...");
+    try {
+      await video.play();
+    } catch (err) {
+      console.error("Video playback failed:", err);
+      showStatus("Video playback was blocked. Tap the page and reload.", true);
+      return;
+    }
 
+    showStatus("Camera running. Starting tracking...");
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
     requestAnimationFrame(renderLoop);
@@ -352,6 +399,7 @@ window.onload = async function () {
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
+      clearStatus();
       const tsHand = performance.now();
       if (tsHand > lastTimestampHand) {
         lastTimestampHand = tsHand;
