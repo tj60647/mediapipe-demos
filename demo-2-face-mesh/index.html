@@ -28,121 +28,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Demo 2 — Face Mesh | MediaPipe Demos</title>
+  <link rel="stylesheet" href="../shared/style.css">
   <script defer src="https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.js"></script>
+  <script defer src="../shared/utils.js"></script>
   <script defer src="sketch.js"></script>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      background: #111;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      color: #e0e0e0;
-    }
-
-    h1 {
-      font-size: 1.2rem;
-      font-weight: 600;
-      margin: 1rem 0 0.25rem;
-      color: #60a5fa;
-    }
-
-    p.subtitle {
-      font-size: 0.85rem;
-      color: #888;
-      margin: 0 0 1rem;
-    }
-
-    .media-container {
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      flex-wrap: wrap;
-      gap: 10px;
-      padding: 0 1rem;
-    }
-
-    #video {
-      display: none;
-    }
-
-    #canvas {
-      max-width: 100%;
-      height: auto;
-      border: 1px solid #333;
-      border-radius: 6px;
-    }
-
-    footer {
-      margin-top: 1.5rem;
-      font-size: 0.75rem;
-      color: #444;
-      padding-bottom: 2rem;
-    }
-
-    footer a {
-      color: #555;
-      text-decoration: none;
-    }
-
-    .camera-controls {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      margin-bottom: 0.75rem;
-      font-size: 0.85rem;
-    }
-
-    .camera-controls label {
-      color: #aaa;
-    }
-
-    .camera-controls select {
-      background: #222;
-      color: #e0e0e0;
-      border: 1px solid #444;
-      border-radius: 4px;
-      padding: 0.25rem 0.5rem;
-      font-size: 0.85rem;
-      cursor: pointer;
-    }
-
-    .camera-controls select:focus {
-      outline: none;
-      border-color: #666;
-    }
-
-    #errorMessage {
-      display: none;
-      margin: 0.5rem 1rem 1rem;
-      padding: 0.6rem 1rem;
-      background: #2a1a1a;
-      border: 1px solid #7f1d1d;
-      border-radius: 6px;
-      color: #fca5a5;
-      font-size: 0.85rem;
-      max-width: 600px;
-      text-align: center;
-    }
-
-    #browserWarning {
-      display: none;
-      margin: 0.5rem 1rem 1rem;
-      padding: 0.6rem 1rem;
-      background: #2a2000;
-      border: 1px solid #7a5f00;
-      border-radius: 6px;
-      color: #fde68a;
-      font-size: 0.85rem;
-      max-width: 600px;
-      text-align: center;
-    }
-  </style>
 </head>
 <body>
-  <h1>Demo 2 — Face Mesh</h1>
+  <h1 style="color: #60a5fa">Demo 2 — Face Mesh</h1>
   <p class="subtitle">MediaPipe FaceMesh • Up to 478 real-time facial landmarks from your webcam</p>
   <div id="cameraSelectWrapper" style="display:none;" class="camera-controls">
     <label for="cameraSelect">Camera:</label>
@@ -150,6 +42,7 @@
   </div>
   <p id="browserWarning"></p>
   <p id="errorMessage"></p>
+  <p id="loadingMessage">Loading AI model…</p>
   <div class="media-container">
     <video id="video" autoplay playsinline muted></video>
     <canvas id="canvas"></canvas>

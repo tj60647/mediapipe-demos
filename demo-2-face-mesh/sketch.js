@@ -43,14 +43,18 @@
 // The region index arrays below come from the MediaPipe FaceMesh
 // canonical face model documentation.
 //
+// SHARED UTILITIES
+// ----------------
+// isMobile, showBrowserWarning(), showError(), and populateCameraSelect()
+// come from shared/utils.js, loaded before this file.
+//
 // ANDROID / SAMSUNG NOTE
 // ----------------------
 // Three improvements have been applied for mobile compatibility:
 //   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
 //   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
 //      GPU/CPU on mid-range Android devices.
-//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
-//      browser is detected, recommending Chrome for Android.
+//   3. Browser warning shown for incompatible mobile browsers (see utils.js).
 //
 // DEBUGGING
 // ---------
@@ -70,8 +74,7 @@ const DOT_RADIUS = 1.5;
 // Radius for special-region dots (eyes, lips, etc.).
 const FEATURE_DOT_RADIUS = 2.5;
 
-// True when the page is loaded on a touch-capable mobile device.
-const isMobile = navigator.maxTouchPoints > 1;
+// isMobile is defined in shared/utils.js.
 
 // =============================================================================
 // FACE REGION INDEX SETS
@@ -190,6 +193,10 @@ window.onload = async function () {
     return;
   }
 
+  // Model ready — hide the loading indicator.
+  const loadingEl = document.getElementById("loadingMessage");
+  if (loadingEl) loadingEl.style.display = "none";
+
   // Store the most recent face results so drawFrame() can access them.
   let faceResults = [];
 
@@ -204,6 +211,9 @@ window.onload = async function () {
 
   // Controls whether the frame loop is running.
   let frameLoopActive = false;
+
+  // Frame counter used to throttle inference on mobile (see frameLoop).
+  let inferenceFrameSkip = 0;
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -286,66 +296,42 @@ window.onload = async function () {
   }
 
   /**
-   * frameLoop — runs FaceLandmarker on the current video frame on every
-   * animation tick and stores the results for renderLoop to draw.
-   * detectForVideo is synchronous in the Tasks API, so no await is needed.
+   * frameLoop — runs FaceLandmarker on the current video frame and stores
+   * the results for renderLoop to draw. detectForVideo is synchronous in
+   * the Tasks API, so no await is needed.
+   *
+   * On mobile, inference runs every other frame (~30 fps) to reduce battery
+   * drain. The renderLoop still draws at 60 fps using the last stored result.
+   *
    * Stops automatically when frameLoopActive is false.
    */
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      if (debugMode) {
-        console.log("Running FaceLandmarker on frame...");
-      }
-      try {
-        const result = faceLandmarker.detectForVideo(video, performance.now());
-        // result.faceLandmarks is an array of faces, each an array of {x,y,z}
-        faceResults = result.faceLandmarks;
-      } catch (err) {
-        console.error("Face detection error:", err);
+      inferenceFrameSkip = (inferenceFrameSkip + 1) % 2;
+      if (!isMobile || inferenceFrameSkip === 0) {
+        if (debugMode) {
+          console.log("Running FaceLandmarker on frame...");
+        }
+        try {
+          const result = faceLandmarker.detectForVideo(video, performance.now());
+          // result.faceLandmarks is an array of faces, each an array of {x,y,z}
+          faceResults = result.faceLandmarks;
+        } catch (err) {
+          console.error("Face detection error:", err);
+        }
       }
     }
     requestAnimationFrame(frameLoop);
   }
 
-  /**
-   * populateCameraSelect — enumerates video-input devices and fills the
-   * on-page <select>. Requires camera permission to have been granted so
-   * that device labels are populated. The wrapper is revealed only when
-   * more than one camera is available.
-   *
-   * @param {string} activeDeviceId — the deviceId currently in use.
-   */
-  async function populateCameraSelect(activeDeviceId) {
-    const select  = document.getElementById("cameraSelect");
-    const wrapper = document.getElementById("cameraSelectWrapper");
-    if (!select || !wrapper) return;
-
-    const devices     = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter(d => d.kind === "videoinput");
-
-    select.innerHTML = "";
-    videoInputs.forEach((device, i) => {
-      const opt    = document.createElement("option");
-      opt.value    = device.deviceId;
-      opt.text     = device.label || `Camera ${i + 1}`;
-      opt.selected = device.deviceId === activeDeviceId;
-      select.appendChild(opt);
-    });
-
-    wrapper.style.display = videoInputs.length > 1 ? "flex" : "none";
-
-    select.onchange = () => startCamera(select.value);
-  }
-
-  // Start with the default camera, then enumerate devices for the selector.
+  // Start with the default camera, then populate the camera selector.
   // Enumerate regardless of whether the initial stream succeeded so that
   // users can try a different camera if the default one failed.
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  await populateCameraSelect(activeId, startCamera);
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -467,39 +453,5 @@ window.onload = async function () {
       ctx.fill();
       ctx.fillText(region.label, startX + 16, y + 9);
     });
-  }
-
-  /**
-   * showBrowserWarning — reveals the #browserWarning banner when the page
-   * is opened in Samsung Internet or a non-Chromium mobile browser.
-   * These browsers may restrict the WebGL/WASM backend used by the model.
-   */
-  function showBrowserWarning() {
-    const ua = navigator.userAgent;
-    const isSamsung         = /SamsungBrowser/i.test(ua);
-    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
-    if (!isSamsung && !isMobileNonChrome) return;
-    const el = document.getElementById("browserWarning");
-    if (!el) return;
-    el.textContent =
-      "For best results on Android, open this page in Chrome. " +
-      "Samsung Internet and other non-Chromium browsers may not support " +
-      "the AI models used in these demos.";
-    el.style.display = "block";
-  }
-
-  /**
-   * showError — displays a human-readable error on the page so that
-   * mobile users who cannot open DevTools can still see what went wrong.
-   *
-   * @param {Error} err - The error to display.
-   */
-  function showError(err) {
-    const el = document.getElementById("errorMessage");
-    if (!el) return;
-    el.textContent = err.name === "NotAllowedError"
-      ? "Camera access was denied. Please allow camera permission and reload."
-      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
-    el.style.display = "block";
   }
 };

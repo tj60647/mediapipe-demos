@@ -44,14 +44,19 @@
 //   Hand landmarks 8/6, 12/10, 16/14, 20/18 — Tip/PIP pairs for finger count
 //   Face landmark  4         — Nose tip (distance)
 //
+// SHARED UTILITIES
+// ----------------
+// isMobile, HAND_CONNECTIONS, showBrowserWarning(), showError(),
+// populateCameraSelect(), and hexToRgba() come from shared/utils.js,
+// loaded before this file.
+//
 // ANDROID / SAMSUNG NOTE
 // ----------------------
 // Three improvements have been applied for mobile compatibility:
 //   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
 //   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
 //      GPU/CPU on mid-range Android devices.
-//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
-//      browser is detected, recommending Chrome for Android.
+//   3. Browser warning shown for incompatible mobile browsers (see utils.js).
 //
 // DEBUGGING
 // ---------
@@ -86,18 +91,7 @@ const FINGER_PAIRS = [
   [20, 18], // pinky
 ];
 
-// Hand skeleton connections — same as Demos 1 and 3.
-const HAND_CONNECTIONS = [
-  [0, 1],   [1, 2],   [2, 3],   [3, 4],
-  [0, 5],   [5, 6],   [6, 7],   [7, 8],
-  [0, 9],   [9, 10],  [10, 11], [11, 12],
-  [0, 13],  [13, 14], [14, 15], [15, 16],
-  [0, 17],  [17, 18], [18, 19], [19, 20],
-  [5, 9],   [9, 13],  [13, 17]
-];
-
-// True when the page is loaded on a touch-capable mobile device.
-const isMobile = navigator.maxTouchPoints > 1;
+// isMobile and HAND_CONNECTIONS are defined in shared/utils.js.
 
 // =============================================================================
 // PURE HELPERS (no canvas state)
@@ -174,20 +168,7 @@ function distanceColor(px, max) {
   return `rgb(${r},${g},${b})`;
 }
 
-/**
- * hexToRgba — converts a #rrggbb hex colour and an alpha value to an rgba()
- * CSS string. Accepts only the six-digit hex format.
- *
- * @param {string} hex   - CSS hex colour, e.g. "#4ade80".
- * @param {number} alpha - Opacity, 0–1.
- * @returns {string}
- */
-function hexToRgba(hex, alpha) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
+// hexToRgba is defined in shared/utils.js.
 
 // =============================================================================
 // ENTRY POINT
@@ -253,6 +234,10 @@ window.onload = async function () {
     return;
   }
 
+  // Models ready — hide the loading indicator.
+  const loadingEl = document.getElementById("loadingMessage");
+  if (loadingEl) loadingEl.style.display = "none";
+
   let handResults = [];
   let faceResults = [];
 
@@ -264,6 +249,9 @@ window.onload = async function () {
 
   let currentStream   = null;
   let frameLoopActive = false;
+
+  // Frame counter used to throttle inference on mobile (see frameLoop).
+  let inferenceFrameSkip = 0;
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -339,61 +327,38 @@ window.onload = async function () {
   }
 
   /**
-   * frameLoop — runs both landmarkers on the current video frame on every
-   * animation tick. detectForVideo is synchronous in the Tasks API.
-   * Stops automatically when frameLoopActive is false.
+   * frameLoop — runs both landmarkers on the current video frame and stores
+   * the results for renderLoop to draw. detectForVideo is synchronous in the
+   * Tasks API. Stops automatically when frameLoopActive is false.
+   *
+   * On mobile, inference runs every other frame (~30 fps) to reduce battery
+   * drain. The renderLoop still draws at 60 fps using the last stored result.
    */
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      try {
-        const nowMs = performance.now();
-        if (debugMode) console.log("Running HandLandmarker and FaceLandmarker on frame...");
-        const handResult = handLandmarker.detectForVideo(video, nowMs);
-        handResults = handResult.landmarks;
+      inferenceFrameSkip = (inferenceFrameSkip + 1) % 2;
+      if (!isMobile || inferenceFrameSkip === 0) {
+        try {
+          const nowMs = performance.now();
+          if (debugMode) console.log("Running HandLandmarker and FaceLandmarker on frame...");
+          const handResult = handLandmarker.detectForVideo(video, nowMs);
+          handResults = handResult.landmarks;
 
-        const faceResult = faceLandmarker.detectForVideo(video, nowMs);
-        faceResults = faceResult.faceLandmarks;
-      } catch (err) {
-        console.error("Frame processing error:", err);
+          const faceResult = faceLandmarker.detectForVideo(video, nowMs);
+          faceResults = faceResult.faceLandmarks;
+        } catch (err) {
+          console.error("Frame processing error:", err);
+        }
       }
     }
     requestAnimationFrame(frameLoop);
   }
 
-  /**
-   * populateCameraSelect — enumerates video-input devices and fills the
-   * on-page <select>. The wrapper is shown only when more than one camera is
-   * available.
-   *
-   * @param {string} activeDeviceId — the deviceId currently in use.
-   */
-  async function populateCameraSelect(activeDeviceId) {
-    const select  = document.getElementById("cameraSelect");
-    const wrapper = document.getElementById("cameraSelectWrapper");
-    if (!select || !wrapper) return;
-
-    const devices     = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter(d => d.kind === "videoinput");
-
-    select.innerHTML = "";
-    videoInputs.forEach((device, i) => {
-      const opt    = document.createElement("option");
-      opt.value    = device.deviceId;
-      opt.text     = device.label || `Camera ${i + 1}`;
-      opt.selected = device.deviceId === activeDeviceId;
-      select.appendChild(opt);
-    });
-
-    wrapper.style.display = videoInputs.length > 1 ? "flex" : "none";
-    select.onchange = () => startCamera(select.value);
-  }
-
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  await populateCameraSelect(activeId, startCamera);
 
   // ── Main draw ────────────────────────────────────────────────────────────
 
@@ -679,12 +644,17 @@ window.onload = async function () {
     const sx = 8;
     const sy = Math.round((h - sh) / 2);
 
-    // Gradient strip — always visible as a reference.
-    for (let i = 0; i < sh; i++) {
-      const refHue  = Math.round((1 - i / sh) * 200);
-      ctx.fillStyle = `hsl(${refHue},70%,55%)`;
-      ctx.fillRect(sx, sy + i, sw, 1);
-    }
+    // Gradient strip — approximates the HSL hue sweep from 200 (blue, top)
+    // to 0 (red, bottom) using multiple colour stops. Using createLinearGradient
+    // is far more efficient than drawing the strip one pixel row at a time.
+    const grad = ctx.createLinearGradient(sx, sy, sx, sy + sh);
+    grad.addColorStop(0,    "hsl(200,70%,55%)");   // blue
+    grad.addColorStop(0.25, "hsl(150,70%,55%)");   // green-cyan
+    grad.addColorStop(0.5,  "hsl(100,70%,55%)");   // yellow-green
+    grad.addColorStop(0.75, "hsl(50, 70%,55%)");   // yellow-orange
+    grad.addColorStop(1,    "hsl(0,  70%,55%)");   // red
+    ctx.fillStyle = grad;
+    ctx.fillRect(sx, sy, sw, sh);
 
     // Dot showing the current position.
     if (indexTip !== null && hue !== null) {
@@ -727,7 +697,8 @@ window.onload = async function () {
     const panelH = 100;
 
     ctx.fillStyle = "rgba(0,0,0,0.55)";
-    roundRect(ctx, panelX, panelY, panelW, panelH, 6);
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelY, panelW, panelH, 6);
     ctx.fill();
 
     ctx.font = "12px monospace";
@@ -770,62 +741,6 @@ window.onload = async function () {
       ctx.fillStyle = color;
       ctx.fillText(value, panelX + 130, ly);
     });
-  }
-
-  // ── Canvas utility ───────────────────────────────────────────────────────
-
-  /**
-   * roundRect — traces a rounded-rectangle path on the given context.
-   *
-   * @param {CanvasRenderingContext2D} context
-   * @param {number} x
-   * @param {number} y
-   * @param {number} width
-   * @param {number} height
-   * @param {number} radius
-   */
-  function roundRect(context, x, y, width, height, radius) {
-    context.beginPath();
-    context.moveTo(x + radius, y);
-    context.arcTo(x + width, y,          x + width, y + height, radius);
-    context.arcTo(x + width, y + height, x,         y + height, radius);
-    context.arcTo(x,         y + height, x,         y,          radius);
-    context.arcTo(x,         y,          x + width, y,          radius);
-    context.closePath();
-  }
-
-  /**
-   * showBrowserWarning — reveals the #browserWarning banner when the page
-   * is opened in Samsung Internet or a non-Chromium mobile browser.
-   * These browsers may restrict the WebGL/WASM backend used by the model.
-   */
-  function showBrowserWarning() {
-    const ua = navigator.userAgent;
-    const isSamsung         = /SamsungBrowser/i.test(ua);
-    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
-    if (!isSamsung && !isMobileNonChrome) return;
-    const el = document.getElementById("browserWarning");
-    if (!el) return;
-    el.textContent =
-      "For best results on Android, open this page in Chrome. " +
-      "Samsung Internet and other non-Chromium browsers may not support " +
-      "the AI models used in these demos.";
-    el.style.display = "block";
-  }
-
-  /**
-   * showError — displays a human-readable error on the page so that
-   * mobile users who cannot open DevTools can still see what went wrong.
-   *
-   * @param {Error} err - The error to display.
-   */
-  function showError(err) {
-    const el = document.getElementById("errorMessage");
-    if (!el) return;
-    el.textContent = err.name === "NotAllowedError"
-      ? "Camera access was denied. Please allow camera permission and reload."
-      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
-    el.style.display = "block";
   }
 
 };

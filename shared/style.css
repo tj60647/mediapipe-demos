@@ -1,0 +1,155 @@
+/*
+  ============================================================================
+  File:    shared/style.css
+  Project: MediaPipe Demos — MDes Prototyping, CCA
+
+  Authors: Copilot
+           Thomas J McLeish
+  License: MIT — see LICENSE in the root of this repository
+  ============================================================================
+
+  PURPOSE
+  Shared styles for all five demo pages (demo-1 through demo-5).
+  Each demo's index.html loads this file via:
+
+    <link rel="stylesheet" href="../shared/style.css">
+
+  The only demo-specific style is the h1 accent colour, applied as an
+  inline style attribute directly on the <h1> element in each demo's HTML.
+  ============================================================================
+*/
+
+/* ── Reset & base ──────────────────────────────────────────────────────────── */
+html, body {
+  margin: 0;
+  padding: 0;
+  background: #111;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #e0e0e0;
+}
+
+/* ── Page heading ──────────────────────────────────────────────────────────── */
+h1 {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 1rem 0 0.25rem;
+  /* Accent colour is set via an inline style on each demo's <h1> element. */
+}
+
+/* ── Subtitle ──────────────────────────────────────────────────────────────── */
+p.subtitle {
+  font-size: 0.85rem;
+  color: #888;
+  margin: 0 0 1rem;
+}
+
+/* ── Media container ───────────────────────────────────────────────────────── */
+.media-container {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 0 1rem;
+}
+
+/* ── Video (hidden; used as source for canvas drawing) ─────────────────────── */
+#video {
+  display: none;
+}
+
+/* ── Canvas ────────────────────────────────────────────────────────────────── */
+#canvas {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #333;
+  border-radius: 6px;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────────── */
+footer {
+  margin-top: 1.5rem;
+  font-size: 0.75rem;
+  color: #444;
+  padding-bottom: 2rem;
+}
+
+footer a {
+  color: #555;
+  text-decoration: none;
+}
+
+/* ── Camera controls ───────────────────────────────────────────────────────── */
+.camera-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.camera-controls label {
+  color: #aaa;
+}
+
+.camera-controls select {
+  background: #222;
+  color: #e0e0e0;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.camera-controls select:focus {
+  outline: none;
+  border-color: #666;
+}
+
+/* ── Status banners ────────────────────────────────────────────────────────── */
+
+/* Loading indicator — visible while the AI model is being fetched and
+   initialised. Hidden by sketch.js once the model is ready. */
+#loadingMessage {
+  margin: 0.5rem 1rem 1rem;
+  padding: 0.6rem 1rem;
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #aaa;
+  font-size: 0.85rem;
+  max-width: 600px;
+  text-align: center;
+}
+
+/* Error banner — hidden by default; shown if camera or model init fails. */
+#errorMessage {
+  display: none;
+  margin: 0.5rem 1rem 1rem;
+  padding: 0.6rem 1rem;
+  background: #2a1a1a;
+  border: 1px solid #7f1d1d;
+  border-radius: 6px;
+  color: #fca5a5;
+  font-size: 0.85rem;
+  max-width: 600px;
+  text-align: center;
+}
+
+/* Browser warning — hidden by default; shown for incompatible mobile browsers. */
+#browserWarning {
+  display: none;
+  margin: 0.5rem 1rem 1rem;
+  padding: 0.6rem 1rem;
+  background: #2a2000;
+  border: 1px solid #7a5f00;
+  border-radius: 6px;
+  color: #fde68a;
+  font-size: 0.85rem;
+  max-width: 600px;
+  text-align: center;
+}

@@ -38,14 +38,18 @@
 // to the camera). To convert to pixel coordinates, multiply x by the canvas
 // width and y by the canvas height.
 //
+// SHARED UTILITIES
+// ----------------
+// isMobile, HAND_CONNECTIONS, showBrowserWarning(), showError(), and
+// populateCameraSelect() come from shared/utils.js, loaded before this file.
+//
 // ANDROID / SAMSUNG NOTE
 // ----------------------
 // Three improvements have been applied for mobile compatibility:
 //   1. Tasks API (WebGL2 delegate) instead of legacy WASM-only solution.
 //   2. Mobile resolution cap (≤480×360 @ 20 fps) to prevent overloading the
 //      GPU/CPU on mid-range Android devices.
-//   3. Browser warning shown when Samsung Internet or a non-Chromium mobile
-//      browser is detected, recommending Chrome for Android.
+//   3. Browser warning shown for incompatible mobile browsers (see utils.js).
 //
 // DEBUGGING
 // ---------
@@ -69,30 +73,7 @@ const SKELETON_COLOR = "rgba(74, 222, 128, 0.5)";
 // Radius of each landmark dot in pixels.
 const DOT_RADIUS = 6;
 
-// True when the page is loaded on a touch-capable mobile device.
-const isMobile = navigator.maxTouchPoints > 1;
-
-// =============================================================================
-// HAND CONNECTIONS
-// =============================================================================
-// MediaPipe defines which landmark indices to connect when drawing the hand
-// skeleton. Each pair [a, b] means "draw a line from landmark a to landmark b."
-//
-// The connections trace each finger from the wrist outward:
-//   Thumb:  0→1→2→3→4
-//   Index:  0→5→6→7→8
-//   Middle: 0→9→10→11→12
-//   Ring:   0→13→14→15→16
-//   Pinky:  0→17→18→19→20
-//   Palm:   5→9→13→17 (cross-palm connections)
-const HAND_CONNECTIONS = [
-  [0, 1], [1, 2], [2, 3], [3, 4],           // Thumb
-  [0, 5], [5, 6], [6, 7], [7, 8],           // Index finger
-  [0, 9], [9, 10], [10, 11], [11, 12],      // Middle finger
-  [0, 13], [13, 14], [14, 15], [15, 16],    // Ring finger
-  [0, 17], [17, 18], [18, 19], [19, 20],    // Pinky finger
-  [5, 9], [9, 13], [13, 17]                 // Palm cross-connections
-];
+// isMobile and HAND_CONNECTIONS are defined in shared/utils.js.
 
 // =============================================================================
 // ENTRY POINT
@@ -116,8 +97,7 @@ window.onload = async function () {
   }
 
   // ── Browser compatibility warning ───────────────────────────────────────
-  // Shown when Samsung Internet or a non-Chromium mobile browser is detected.
-  // These browsers may block the WebAssembly/WebGL delegate used by the model.
+  // Shown for Samsung Internet, non-Chrome Android, and iOS in-app browsers.
   showBrowserWarning();
 
   // ── MediaPipe HandLandmarker setup (Tasks API) ───────────────────────────
@@ -150,6 +130,10 @@ window.onload = async function () {
     return;
   }
 
+  // Model ready — hide the loading indicator.
+  const loadingEl = document.getElementById("loadingMessage");
+  if (loadingEl) loadingEl.style.display = "none";
+
   // Store the most recent hand results so drawFrame() can access them.
   let handResults = [];
 
@@ -164,6 +148,9 @@ window.onload = async function () {
 
   // Controls whether the frame loop is running.
   let frameLoopActive = false;
+
+  // Frame counter used to throttle inference on mobile (see frameLoop).
+  let inferenceFrameSkip = 0;
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -248,68 +235,43 @@ window.onload = async function () {
   }
 
   /**
-   * frameLoop — runs the HandLandmarker on the current video frame on every
-   * animation tick and stores the results for renderLoop to draw.
-   * detectForVideo is synchronous in the Tasks API, so no await is needed.
+   * frameLoop — runs the HandLandmarker on the current video frame and stores
+   * the results for renderLoop to draw. detectForVideo is synchronous in the
+   * Tasks API, so no await is needed.
+   *
+   * On mobile, inference runs every other frame (~30 fps) to reduce battery
+   * drain. The renderLoop still draws at 60 fps using the last stored result,
+   * so the video feed remains smooth.
+   *
    * Stops automatically when frameLoopActive is false.
    */
   function frameLoop() {
     if (!frameLoopActive) return;
     if (video.readyState >= 2) {
-      if (debugMode) {
-        console.log("Running HandLandmarker on frame...");
-      }
-      try {
-        const result = handLandmarker.detectForVideo(video, performance.now());
-        // result.landmarks is an array of hands, each an array of 21 {x,y,z}
-        handResults = result.landmarks;
-      } catch (err) {
-        console.error("Hand detection error:", err);
+      inferenceFrameSkip = (inferenceFrameSkip + 1) % 2;
+      if (!isMobile || inferenceFrameSkip === 0) {
+        if (debugMode) {
+          console.log("Running HandLandmarker on frame...");
+        }
+        try {
+          const result = handLandmarker.detectForVideo(video, performance.now());
+          // result.landmarks is an array of hands, each an array of 21 {x,y,z}
+          handResults = result.landmarks;
+        } catch (err) {
+          console.error("Hand detection error:", err);
+        }
       }
     }
     requestAnimationFrame(frameLoop);
   }
 
-  /**
-   * populateCameraSelect — enumerates video-input devices and fills the
-   * on-page <select>. The wrapper is revealed only when more than one
-   * camera is available. Requires camera permission to have been granted
-   * so that device labels are populated.
-   *
-   * @param {string} activeDeviceId — the deviceId currently in use, used
-   *                                  to pre-select the matching option.
-   */
-  async function populateCameraSelect(activeDeviceId) {
-    const select  = document.getElementById("cameraSelect");
-    const wrapper = document.getElementById("cameraSelectWrapper");
-    if (!select || !wrapper) return;
-
-    const devices     = await navigator.mediaDevices.enumerateDevices();
-    const videoInputs = devices.filter(d => d.kind === "videoinput");
-
-    select.innerHTML = "";
-    videoInputs.forEach((device, i) => {
-      const opt    = document.createElement("option");
-      opt.value    = device.deviceId;
-      opt.text     = device.label || `Camera ${i + 1}`;
-      opt.selected = device.deviceId === activeDeviceId;
-      select.appendChild(opt);
-    });
-
-    // Show the selector only when there are multiple cameras to choose from.
-    wrapper.style.display = videoInputs.length > 1 ? "flex" : "none";
-
-    select.onchange = () => startCamera(select.value);
-  }
-
-  // Start with the default camera, then enumerate devices for the selector.
+  // Start with the default camera, then populate the camera selector.
   // Enumerate regardless of whether the initial stream succeeded so that
   // users can try a different camera if the default one failed.
-  startCamera().then(() => {
-    const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
-    const activeId = track ? track.getSettings().deviceId : "";
-    populateCameraSelect(activeId);
-  });
+  await startCamera();
+  const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
+  const activeId = track ? track.getSettings().deviceId : "";
+  await populateCameraSelect(activeId, startCamera);
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -402,39 +364,5 @@ window.onload = async function () {
       10,
       h - 10
     );
-  }
-
-  /**
-   * showBrowserWarning — reveals the #browserWarning banner when the page
-   * is opened in Samsung Internet or a non-Chromium mobile browser.
-   * These browsers may restrict the WebGL/WASM backend used by the model.
-   */
-  function showBrowserWarning() {
-    const ua = navigator.userAgent;
-    const isSamsung       = /SamsungBrowser/i.test(ua);
-    const isMobileNonChrome = /Android|iPhone|iPad/i.test(ua) && !/Chrome\/[0-9]/i.test(ua);
-    if (!isSamsung && !isMobileNonChrome) return;
-    const el = document.getElementById("browserWarning");
-    if (!el) return;
-    el.textContent =
-      "For best results on Android, open this page in Chrome. " +
-      "Samsung Internet and other non-Chromium browsers may not support " +
-      "the AI models used in these demos.";
-    el.style.display = "block";
-  }
-
-  /**
-   * showError — displays a human-readable error on the page so that
-   * mobile users who cannot open DevTools can still see what went wrong.
-   *
-   * @param {Error} err - The error to display.
-   */
-  function showError(err) {
-    const el = document.getElementById("errorMessage");
-    if (!el) return;
-    el.textContent = err.name === "NotAllowedError"
-      ? "Camera access was denied. Please allow camera permission and reload."
-      : `Error: ${err.message || err.name}. Try reloading or use HTTPS.`;
-    el.style.display = "block";
   }
 };
