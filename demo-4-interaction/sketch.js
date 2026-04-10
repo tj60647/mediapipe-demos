@@ -221,7 +221,7 @@ window.onload = function () {
     maxNumHands: 1,
     minDetectionConfidence: 0.5,
     minTrackingConfidence: 0.5,
-    modelComplexity: 1
+    modelComplexity: 0
   });
 
   let handResults = [];
@@ -276,7 +276,11 @@ window.onload = function () {
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
+    const videoConstraints = {
+      width:      { ideal: 640 },
+      height:     { ideal: 480 },
+      facingMode: { ideal: "user" }
+    };
     if (deviceId) videoConstraints.deviceId = { exact: deviceId };
 
     try {
@@ -285,6 +289,7 @@ window.onload = function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
+      showError(err);
       return;
     }
 
@@ -766,6 +771,21 @@ window.onload = function () {
     context.arcTo(x,         y + height, x,         y,          radius);
     context.arcTo(x,         y,          x + width, y,          radius);
     context.closePath();
+  }
+
+  /**
+   * showError — displays a human-readable camera error on the page so that
+   * mobile users who cannot open DevTools can still see what went wrong.
+   *
+   * @param {Error} err - The error thrown by getUserMedia.
+   */
+  function showError(err) {
+    const el = document.getElementById("errorMessage");
+    if (!el) return;
+    el.textContent = err.name === "NotAllowedError"
+      ? "Camera access was denied. Please allow camera permission and reload."
+      : `Camera error: ${err.message || err.name}. Try reloading or use HTTPS.`;
+    el.style.display = "block";
   }
 
 };
