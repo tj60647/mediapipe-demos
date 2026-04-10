@@ -345,6 +345,82 @@ Each task card on the Beyond page links directly to MediaPipe Studio so you can 
 
 ---
 
+## How to Explore Tasks Before Coding
+
+Before you commit to implementing a new task, spend 10–15 minutes in **MediaPipe Studio** to test it live with your webcam. This helps you answer three key questions:
+
+1. **Does this model detect what I need?**
+2. **Is the output stable enough for my project?**
+3. **What settings (confidence, hand count, etc.) make it work best?**
+
+### MediaPipe Studio Session (Guided Workflow)
+
+1. Open [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) in your browser.
+2. Pick one task from the list (start with **Face Landmarker** if you're new):
+   - Face Landmarker (good follow-up to Demo 2)
+   - Hand Landmarker (good follow-up to Demo 1)
+   - Object Detector
+   - Gesture Recognizer
+   - Pose Landmarker
+   - Image Classifier
+   - Audio Classifier
+3. Allow webcam access and adjust these settings one at a time:
+   - **Confidence threshold** — lower it until the model becomes noisy, then raise it until it's stable
+   - **Hand count** (if available) — test both 1 and 2 to understand the tradeoff
+   - **Running mode** — try both live camera and single image modes
+4. Try these things:
+   - Move around the room (does it follow?).
+   - Dim the lights (does it still detect?).
+   - Change your pose or expression dramatically (does it jump or smooth?).
+   - Hold an object in front of your face (does it fail gracefully?).
+5. **Write down one thing you discovered** — does the model behave the way you expected? What surprised you?
+
+> **📐 Concept Sidebar: Evaluation Before Implementation**
+>
+> Studio saves you hours of debugging. If a model doesn't behave well in Studio with your actual webcam, implementing it in code won't magically fix it. Use Studio to decide whether a task is right for your project *before* you build.
+
+---
+
+## Learning from Code Examples
+
+Once you know which task you want to use, look at working code to understand the pattern. **CodePen** has near-official MediaPipe examples right in the browser; **OpenProcessing** has community sketches.
+
+### CodePen: MediaPipe Task Examples
+
+The [MediaPipe CodePen profile](https://codepen.io/mediapipe-preview/) has working examples for every task. Each pen shows the current JavaScript API in a clean, runnable format.
+
+**How to use CodePen examples:**
+
+1. Browse [MediaPipe CodePen](https://codepen.io/mediapipe-preview/) to find your task.
+2. Click **Fork** to make your own copy.
+3. Read the JavaScript panel and look for:
+   - How the model is imported and initialized
+   - How results are parsed in the callback
+   - How landmarks are drawn or used
+4. Modify one thing at a time (change colours, thresholds, or drawing logic) and watch the result.
+5. **Copy patterns, not the whole code.** You'll learn more by patching it into your own structure than by starting from someone else's sketch.
+
+> **📐 Concept Sidebar: Pattern Over Copy-Paste**
+>
+> CodePen examples are reference implementations, not templates. The value is in understanding *how* the model is used, not in copying and pasting entire projects. If you're stuck on a specific task — like parsing hand landmarks or handling confidence scores — CodePen is the fastest way to see the answer.
+
+### OpenProcessing: Community Sketches
+
+The [OpenProcessing](https://openprocessing.org) community often remixes the sketches from this project. Use it to:
+
+- See creative uses of the models beyond the demos
+- Find variations (different drawing styles, thresholds, layouts)
+- Understand what "stable enough" means for your own work
+
+**Suggested search:**
+- `mediapipe hand`
+- `face landmark`
+- `webcam interactive`
+
+Every `sketch.js` in this project can be pasted directly into OpenProcessing, so you can also use your own demos as the baseline for exploration.
+
+---
+
 ## AI Remix Workflow
 
 Students can use AI coding assistants to remix patterns across demos while keeping a stable baseline.
@@ -386,16 +462,17 @@ Explain which landmarks, thresholds, and mappings you used.
 ## Getting Started Checklist
 
 - [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or via `http://localhost:<port>/gallery/` when running locally)
-- [ ] Click **Demo 1 — Hand Tracking** and allow webcam access
-- [ ] Hold your hand up in front of the camera — you should see green dots and lines follow your joints
+- [ ] Click **Demo 1 — Hand Tracking** and allow webcam access — you should see green dots and lines follow your joints
 - [ ] Open **Demo 2 — Face Mesh** — look at the camera and see 468 coloured dots map to your facial features
 - [ ] Open **Demo 3 — Hands and Face Combined** — hold your hand near your face and see both models running at once
-- [ ] Open **Demo 4 — Interaction Basics** — move your index finger around and watch the distance, zone, and finger-count values change in the HUD
-- [ ] Open **Demo 5 — Face Instrument** — hover your index fingertip close to your forehead, eyebrows, nose, lips, and cheeks to activate each region
-- [ ] Open `sketch.js` in any demo and read through the comments to understand how each part works
-- [ ] Try changing `debugMode = true` to see per-frame log output in the browser DevTools Console
-- [ ] Visit the [Exploration Sources](https://tj60647.github.io/mediapipe-demos/resources/) page and try MediaPipe Studio before writing any code
-- [ ] Open the [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) page and try two tasks in MediaPipe Studio
+- [ ] Open **Demo 4 — Interaction Basics** — move your index finger around and watch distance/zone/finger-count values change
+- [ ] Open **Demo 5 — Face Instrument** — hover your index fingertip near your forehead, eyebrows, nose, lips, and cheeks to activate regions
+- [ ] Open `sketch.js` in any demo and read through the comments
+- [ ] Try changing `debugMode = true` to see per-frame logs in the browser DevTools Console
+- [ ] Open the [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) page and read the task descriptions
+- [ ] Follow the **MediaPipe Studio Session** workflow: pick one new task from the Beyond page and test it live in Studio with your webcam
+- [ ] Follow the **Learning from Code Examples** section: find a CodePen example of the same task and read the code
+- [ ] **Optional — Open [Exploration Sources](https://tj60647.github.io/mediapipe-demos/resources/)** for a curated list of reference links and tools
 
 ---
 
