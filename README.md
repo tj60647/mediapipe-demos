@@ -32,6 +32,8 @@ Open the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/galler
 4. Copy the JavaScript from the same demo's `sketch.js` and paste it into the JavaScript panel.
 5. Run the sketch — webcam access works in OpenProcessing HTTPS.
 
+> **Example:** [Demo 1 Hand Tracking on OpenProcessing](https://openprocessing.org/sketch/2914727) — this is what a finished sketch looks like.
+
 ### Path 3: Local Server (Optional for Development)
 
 Use a local server if you want to edit the demos offline or test changes before pushing to OpenProcessing.
