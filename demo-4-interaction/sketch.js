@@ -303,7 +303,13 @@ window.onload = function () {
       }
     };
 
-    video.play();
+    try {
+      await video.play();
+    } catch (playErr) {
+      console.error("video.play() rejected:", playErr);
+      showError(playErr);
+      return;
+    }
 
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
