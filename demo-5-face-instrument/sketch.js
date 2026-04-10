@@ -290,11 +290,6 @@ window.onload = async function () {
   }
 
   /**
-   * frameLoop — runs both landmarkers on the current video frame on every
-   * animation tick. detectForVideo is synchronous in the Tasks API.
-   * Stops automatically when frameLoopActive is false.
-   */
-  /**
    * frameLoop — runs both landmarkers on the current video frame and stores
    * the results for renderLoop to draw. detectForVideo is synchronous in the
    * Tasks API. Stops automatically when frameLoopActive is false.
