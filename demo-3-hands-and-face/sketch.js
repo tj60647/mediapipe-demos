@@ -133,12 +133,15 @@ window.onload = async function () {
 
   let handLandmarker;
   let faceLandmarker;
+  // Cache the resolved vision fileset so setupHandCountToggle can reuse it
+  // without re-initializing the WASM loader on every toggle.
+  let sharedVision;
   try {
-    const vision = await FilesetResolver.forVisionTasks(
+    sharedVision = await FilesetResolver.forVisionTasks(
       "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
     );
 
-    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    handLandmarker = await HandLandmarker.createFromOptions(sharedVision, {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
@@ -148,7 +151,7 @@ window.onload = async function () {
       numHands: desiredMaxHands
     });
 
-    faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+    faceLandmarker = await FaceLandmarker.createFromOptions(sharedVision, {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
@@ -178,7 +181,8 @@ window.onload = async function () {
   /**
    * setupHandCountToggle — wires the 1/2-hands selector to the HandLandmarker
    * so users can switch tracking mode without reloading the page.
-   * Recreates the HandLandmarker with the new numHands value.
+   * Recreates the HandLandmarker with the new numHands value, reusing the
+   * cached sharedVision fileset to avoid redundant WASM loader initialization.
    */
   function setupHandCountToggle() {
     const select = document.getElementById("handCountSelect");
@@ -187,14 +191,11 @@ window.onload = async function () {
     select.value = String(desiredMaxHands);
 
     select.onchange = async () => {
-      const nextMaxHands = parseInt(select.value, 10) === 2 ? 2 : 1;
+      const nextMaxHands = Number.parseInt(select.value, 10) === 2 ? 2 : 1;
       desiredMaxHands = nextMaxHands;
 
       try {
-        const vision = await FilesetResolver.forVisionTasks(
-          "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
-        );
-        const updated = await HandLandmarker.createFromOptions(vision, {
+        const updated = await HandLandmarker.createFromOptions(sharedVision, {
           baseOptions: {
             modelAssetPath:
               "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task",
