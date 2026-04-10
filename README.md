@@ -323,6 +323,8 @@ Turn the face into a proximity-triggered control surface. Nine named regions —
 
 📂 **Sketch:** [`demo-5-face-instrument/sketch.js`](demo-5-face-instrument/sketch.js)
 
+🌐 **OpenProcessing:** [Try it live](https://openprocessing.org/sketch/2914827)
+
 > **📐 Concept Sidebar: Proximity Trigger**
 >
 > A proximity trigger converts a continuous distance value into an on/off state:
