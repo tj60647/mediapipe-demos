@@ -28,12 +28,13 @@ Open the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/galler
 
 1. Open [OpenProcessing](https://openprocessing.org/) in a new tab.
 2. Create a new sketch.
-3. Paste the contents of any `sketch.js` from this repo (e.g., `demo-1-hand-tracking/sketch.js`).
-4. In the sketch settings, add this CDN link in the **Libraries** section:
+3. Paste the HTML from any `index.html` in the sketch editor (the full page structure).
+4. Paste the JavaScript from any `sketch.js` into the JavaScript panel.
+5. In the sketch settings, add this CDN link in the **Libraries** section:
    ```
    https://cdn.jsdelivr.net/npm/@mediapipe/tasks-web@latest
    ```
-5. Run the sketch — webcam access works in OpenProcessing HTTPS environment.
+6. Run the sketch — webcam access works in OpenProcessing HTTPS environment.
 
 ### Path 3: Local Server (Optional for Development)
 
@@ -166,6 +167,8 @@ Detect up to two hands in your webcam feed and draw the 21 landmark points per h
 - A count of hands currently detected in the corner
 
 📂 **Sketch:** [`demo-1-hand-tracking/sketch.js`](demo-1-hand-tracking/sketch.js)
+
+🌐 **OpenProcessing:** [Try it live](https://openprocessing.org/sketch/2914727)
 
 > **📐 Concept Sidebar: Normalised Coordinates**
 >
