@@ -161,7 +161,16 @@ window.onload = async function () {
     return;
   }
 
+  function setStatus(msg, isError = false) {
+    const el = document.getElementById("status");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = isError ? "error" : "";
+  }
+
   // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
+
+  setStatus("Loading model…");
 
   const { FaceLandmarker, FilesetResolver } = await import(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
@@ -206,6 +215,8 @@ window.onload = async function () {
     console.log("FaceLandmarker ready.");
   }
 
+  setStatus("Camera starting…");
+
   // Store the most recent detection results so the render loop can read them.
   // result.faceLandmarks is an array of faces; each face is an array of 478
   // { x, y, z } objects (468 face points + 10 iris points).
@@ -237,8 +248,14 @@ window.onload = async function () {
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
-    if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+    setStatus("Requesting camera…");
+
+    const videoConstraints = { width: { ideal: 640 }, height: { ideal: 480 } };
+    if (deviceId) {
+      videoConstraints.deviceId = { exact: deviceId };
+    } else {
+      videoConstraints.facingMode = { ideal: "user" };
+    }
 
     try {
       currentStream = await navigator.mediaDevices.getUserMedia(
@@ -246,6 +263,7 @@ window.onload = async function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
+      setStatus("Camera error: " + err.message, true);
       return;
     }
 
@@ -259,7 +277,15 @@ window.onload = async function () {
       }
     };
 
-    video.play();
+    try {
+      await video.play();
+    } catch (err) {
+      console.error("video.play() failed:", err);
+      setStatus("Video error: " + err.message, true);
+      return;
+    }
+
+    setStatus("");
 
     if (debugMode) {
       console.log("Webcam started.");

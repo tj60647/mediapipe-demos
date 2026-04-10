@@ -112,11 +112,24 @@
       outline: none;
       border-color: #666;
     }
+
+    #status {
+      font-size: 0.85rem;
+      color: #aaa;
+      min-height: 1.2em;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    #status.error {
+      color: #f87171;
+    }
   </style>
 </head>
 <body>
   <h1>Demo 2 — Face Mesh</h1>
   <p class="subtitle">MediaPipe FaceMesh • Up to 478 real-time facial landmarks from your webcam</p>
+  <div id="status">Loading model…</div>
   <div id="cameraSelectWrapper" style="display:none;" class="camera-controls">
     <label for="cameraSelect">Camera:</label>
     <select id="cameraSelect"></select>

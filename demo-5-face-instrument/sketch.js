@@ -143,6 +143,13 @@ window.onload = async function () {
     return;
   }
 
+  function setStatus(msg, isError = false) {
+    const el = document.getElementById("status");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = isError ? "error" : "";
+  }
+
   // ── Ripple state ─────────────────────────────────────────────────────────
   // Each ripple: { x, y, color, radius, alpha }
   // Ripples expand and fade over time.
@@ -152,6 +159,8 @@ window.onload = async function () {
   let prevActive = new Set();
 
   // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
+
+  setStatus("Loading hand model…");
 
   const { HandLandmarker, FaceLandmarker, FilesetResolver } = await import(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
@@ -193,6 +202,8 @@ window.onload = async function () {
     console.log("MediaPipe HandLandmarker initialised.");
   }
 
+  setStatus("Loading face model…");
+
   // ── MediaPipe FaceLandmarker setup ───────────────────────────────────────
 
   let faceLandmarker;
@@ -225,6 +236,8 @@ window.onload = async function () {
     console.log("MediaPipe FaceLandmarker initialised.");
   }
 
+  setStatus("Camera starting…");
+
   let handResults = [];
   let faceResults = [];
 
@@ -250,8 +263,14 @@ window.onload = async function () {
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
-    if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+    setStatus("Requesting camera…");
+
+    const videoConstraints = { width: { ideal: 640 }, height: { ideal: 480 } };
+    if (deviceId) {
+      videoConstraints.deviceId = { exact: deviceId };
+    } else {
+      videoConstraints.facingMode = { ideal: "user" };
+    }
 
     try {
       currentStream = await navigator.mediaDevices.getUserMedia(
@@ -259,6 +278,7 @@ window.onload = async function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
+      setStatus("Camera error: " + err.message, true);
       return;
     }
 
@@ -272,7 +292,15 @@ window.onload = async function () {
       }
     };
 
-    video.play();
+    try {
+      await video.play();
+    } catch (err) {
+      console.error("video.play() failed:", err);
+      setStatus("Video error: " + err.message, true);
+      return;
+    }
+
+    setStatus("");
 
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);

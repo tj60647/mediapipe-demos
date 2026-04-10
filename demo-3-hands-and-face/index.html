@@ -115,11 +115,24 @@
       outline: none;
       border-color: #666;
     }
+
+    #status {
+      font-size: 0.85rem;
+      color: #aaa;
+      min-height: 1.2em;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
+    #status.error {
+      color: #f87171;
+    }
   </style>
 </head>
 <body>
   <h1>Demo 3 — Hands and Face Combined</h1>
   <p class="subtitle">MediaPipe Hands + FaceMesh • Side-by-side: raw feed left, landmarks right</p>
+  <div id="status">Loading models…</div>
   <div id="cameraSelectWrapper" style="display:none;" class="camera-controls">
     <label for="cameraSelect">Camera:</label>
     <select id="cameraSelect"></select>

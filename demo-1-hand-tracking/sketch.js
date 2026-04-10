@@ -116,10 +116,19 @@ window.onload = async function () {
     return;
   }
 
+  function setStatus(msg, isError = false) {
+    const el = document.getElementById("status");
+    if (!el) return;
+    el.textContent = msg;
+    el.className = isError ? "error" : "";
+  }
+
   // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
   // The tasks-vision library is loaded via dynamic import — no extra <script>
   // tag is needed in index.html. The .mjs bundle is an ES module that exposes
   // HandLandmarker, FilesetResolver, and other Tasks API classes.
+
+  setStatus("Loading model…");
 
   const { HandLandmarker, FilesetResolver } = await import(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
@@ -166,6 +175,8 @@ window.onload = async function () {
     console.log("HandLandmarker ready.");
   }
 
+  setStatus("Camera starting…");
+
   // Store the most recent detection results so the render loop can read them.
   // result.landmarks is an array of hands; each hand is an array of 21 { x, y, z }.
   let handResults = [];
@@ -198,8 +209,14 @@ window.onload = async function () {
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
-    if (deviceId) videoConstraints.deviceId = { exact: deviceId };
+    setStatus("Requesting camera…");
+
+    const videoConstraints = { width: { ideal: 640 }, height: { ideal: 480 } };
+    if (deviceId) {
+      videoConstraints.deviceId = { exact: deviceId };
+    } else {
+      videoConstraints.facingMode = { ideal: "user" };
+    }
 
     try {
       currentStream = await navigator.mediaDevices.getUserMedia(
@@ -207,6 +224,7 @@ window.onload = async function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
+      setStatus("Camera error: " + err.message, true);
       return;
     }
 
@@ -221,7 +239,15 @@ window.onload = async function () {
       }
     };
 
-    video.play();
+    try {
+      await video.play();
+    } catch (err) {
+      console.error("video.play() failed:", err);
+      setStatus("Video error: " + err.message, true);
+      return;
+    }
+
+    setStatus("");
 
     if (debugMode) {
       console.log("Webcam started.");
