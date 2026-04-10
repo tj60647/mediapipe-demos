@@ -28,13 +28,9 @@ Open the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/galler
 
 1. Open [OpenProcessing](https://openprocessing.org/) in a new tab.
 2. Create a new sketch.
-3. Paste the HTML from any `index.html` in the sketch editor (the full page structure).
-4. Paste the JavaScript from any `sketch.js` into the JavaScript panel.
-5. In the sketch settings, add this CDN link in the **Libraries** section:
-   ```
-   https://cdn.jsdelivr.net/npm/@mediapipe/tasks-web@latest
-   ```
-6. Run the sketch — webcam access works in OpenProcessing HTTPS environment.
+3. Pick a demo (e.g., demo-1-hand-tracking). Copy the HTML from its `index.html` and paste it into the OpenProcessing sketch editor.
+4. Copy the JavaScript from the same demo's `sketch.js` and paste it into the JavaScript panel.
+5. Run the sketch — webcam access works in OpenProcessing HTTPS.
 
 ### Path 3: Local Server (Optional for Development)
 
