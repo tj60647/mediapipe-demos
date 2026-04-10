@@ -16,9 +16,28 @@ The hands-on thread running through the whole project is a progressive series of
 
 ---
 
-## Run Locally (2 Minutes)
+## Getting Started (Pick Your Path)
 
-Use a local server so webcam access works reliably.
+**No setup required — start immediately.**
+
+### Path 1: Online Gallery (Recommended for First Time)
+
+Open the [Code Example Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser. All demos run live without any local setup.
+
+### Path 2: OpenProcessing (Best for Remixing)
+
+1. Open [OpenProcessing](https://openprocessing.org/) in a new tab.
+2. Create a new sketch.
+3. Paste the contents of any `sketch.js` from this repo (e.g., `demo-1-hand-tracking/sketch.js`).
+4. In the sketch settings, add this CDN link in the **Libraries** section:
+   ```
+   https://cdn.jsdelivr.net/npm/@mediapipe/tasks-web@latest
+   ```
+5. Run the sketch — webcam access works in OpenProcessing HTTPS environment.
+
+### Path 3: Local Server (Optional for Development)
+
+Use a local server if you want to edit the demos offline or test changes before pushing to OpenProcessing.
 
 1. Open a terminal in the repository root.
 2. Start a local server:
@@ -461,33 +480,36 @@ Explain which landmarks, thresholds, and mappings you used.
 
 ## Getting Started Checklist
 
-- [ ] Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) in your browser (or via `http://localhost:<port>/gallery/` when running locally)
-- [ ] Click **Demo 1 — Hand Tracking** and allow webcam access — you should see green dots and lines follow your joints
-- [ ] Open **Demo 2 — Face Mesh** — look at the camera and see 468 coloured dots map to your facial features
-- [ ] Open **Demo 3 — Hands and Face Combined** — hold your hand near your face and see both models running at once
-- [ ] Open **Demo 4 — Interaction Basics** — move your index finger around and watch distance/zone/finger-count values change
-- [ ] Open **Demo 5 — Face Instrument** — hover your index fingertip near your forehead, eyebrows, nose, lips, and cheeks to activate regions
-- [ ] Open `sketch.js` in any demo and read through the comments
-- [ ] Try changing `debugMode = true` to see per-frame logs in the browser DevTools Console
-- [ ] Open the [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) page and read the task descriptions
-- [ ] Follow the **MediaPipe Studio Session** workflow: pick one new task from the Beyond page and test it live in Studio with your webcam
-- [ ] Follow the **Learning from Code Examples** section: find a CodePen example of the same task and read the code
-- [ ] **Optional — Open [Exploration Sources](https://tj60647.github.io/mediapipe-demos/resources/)** for a curated list of reference links and tools
+**Start here:** Open the [Gallery](https://tj60647.github.io/mediapipe-demos/gallery/) (no setup needed).
+
+- [ ] Click **Demo 1 — Hand Tracking** and allow webcam access — green dots should follow your hand joints
+- [ ] Try **Demo 2 — Face Mesh** — 468 coloured dots on your face
+- [ ] Try **Demo 3 — Hands and Face Combined** — split-screen view of both models
+- [ ] Try **Demo 4 — Interaction Basics** — see distance, zones, and finger-count values as you move
+- [ ] Try **Demo 5 — Face Instrument** — activate face regions by moving your finger close to them
+- [ ] Open `sketch.js` from any demo and read the comments to understand the code structure
+- [ ] Try changing `debugMode = true` in a sketch and reload to see console output
+- [ ] Open the [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) page — read the five additional task descriptions
+- [ ] Pick one new task and test it live in [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) (guided workflow is in the README)
+- [ ] Find a CodePen example of the same task on [MediaPipe CodePen](https://codepen.io/mediapipe-preview/) and read the code
+- [ ] Optional: Paste a `sketch.js` into [OpenProcessing](https://openprocessing.org/) to remix it
+- [ ] Optional: Set up a [local server](#path-3-local-server-optional-for-development) if you want to develop offline
 
 ---
 
-## Exploration Sources
+## Reference: Exploration Sources
 
-Before writing code for a new project idea, use these resources to explore what MediaPipe can do and to find reference examples.
+The following resources are mentioned throughout the checklist. Use them to explore, learn, and remix:
 
-| Source | Best for |
-|---|---|
-| [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) | Testing any MediaPipe task in the browser with your webcam — no code required. Adjust thresholds, try different inputs, and decide whether a model fits your idea before building. |
-| [MediaPipe CodePen](https://codepen.io/mediapipe-preview/) | Near-official working examples for each MediaPipe task using the JavaScript task API. Fork a pen to experiment without a local setup. |
-| [OpenProcessing](https://openprocessing.org/) | Sketch culture, remixing, and sharing. Paste any `sketch.js` from this project directly into a new sketch. |
-| [p5.js Examples](https://p5js.org/examples/) | Interaction, drawing, animation, and visual design patterns in p5.js. Useful reference when building on top of the demos. |
+| Source | Best for | Access |
+|---|---|---|
+| [MediaPipe Studio](https://mediapipe-studio.webapps.google.com/) | Testing any MediaPipe task live with your webcam — no code required | Browser, free |
+| [MediaPipe CodePen](https://codepen.io/mediapipe-preview/) | Near-official working examples for every task | Browser, free (fork to edit) |
+| [OpenProcessing](https://openprocessing.org/) | Sketch culture, remixing, and sharing MediaPipe sketches | Browser, free |
+| [p5.js Examples](https://p5js.org/examples/) | Interaction, drawing, animation patterns | Browser, free |
+| [Beyond Face and Hands](https://tj60647.github.io/mediapipe-demos/beyond/) | Five additional MediaPipe tasks with project prompts | Browser, free |
 
-📂 **Resources page:** [`resources/index.html`](resources/index.html)
+📂 **Resources page:** [`resources/index.html`](resources/index.html) has additional links.
 
 ---
 
