@@ -57,6 +57,30 @@ If `python` is unavailable, try:
 py -m http.server 5500
 ```
 
+### Path 4: HTTPS Phone Testing (Recommended for Mobile Camera Debugging)
+
+Mobile browsers usually block webcam access on plain `http://192.168.x.x` URLs. The quickest reliable workaround is to run the repo locally and expose it through an HTTPS tunnel.
+
+1. Install the small dev tools once:
+    ```powershell
+    npm install
+    ```
+2. Start the local server only:
+    ```powershell
+    npm run dev
+    ```
+3. Or start the local server and an HTTPS tunnel together:
+    ```powershell
+    npm run dev:https
+    ```
+4. In the terminal output, open the `https://*.loca.lt` URL on your phone.
+5. For debugging, add `?debug=1` to the demo URL, for example:
+    ```text
+    https://your-url.loca.lt/demo-1-hand-tracking/?debug=1
+    ```
+
+Why this path exists: the tunnel gives your phone a real HTTPS origin, which satisfies the browser security requirement for `getUserMedia()` camera access.
+
 ---
 
 ## The Tools We Use

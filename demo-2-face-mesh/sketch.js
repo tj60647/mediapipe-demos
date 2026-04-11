@@ -73,6 +73,16 @@
 // Toggle console logging. Set to true to see per-frame debug output.
 const debugMode = false;
 
+// Phones and tablets are more reliable with the CPU delegate for MediaPipe.
+// Use ?delegate=gpu or ?delegate=cpu to override this default for testing.
+const queryParams = new URLSearchParams(window.location.search);
+const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const requestedDelegate = (queryParams.get("delegate") || "").toLowerCase();
+const preferredDelegate = requestedDelegate === "gpu" || requestedDelegate === "cpu"
+  ? requestedDelegate.toUpperCase()
+  : (isMobileDevice ? "CPU" : "GPU");
+const fallbackDelegate = preferredDelegate === "GPU" ? "CPU" : "GPU";
+
 // Radius of each landmark dot in pixels.
 const DOT_RADIUS = 1.5;
 
@@ -212,26 +222,26 @@ window.onload = async function () {
 
   let faceLandmarker;
   try {
-    showStatus("Loading face model (GPU)...");
+    showStatus(`Loading face model (${preferredDelegate})...`);
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
           "/face_landmarker/float16/latest/face_landmarker.task",
-        delegate: "GPU"
+        delegate: preferredDelegate
       },
       runningMode: "VIDEO",
       numFaces: 1              // track one face (increase for multi-face)
     });
-  } catch (gpuErr) {
-    console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
-    showStatus("Loading face model (CPU fallback)...");
+  } catch (delegateErr) {
+    console.warn(`${preferredDelegate} delegate unavailable, retrying with ${fallbackDelegate}:`, delegateErr);
+    showStatus(`Loading face model (${fallbackDelegate} fallback)...`);
     faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
       baseOptions: {
         modelAssetPath:
           "https://storage.googleapis.com/mediapipe-models/face_landmarker" +
           "/face_landmarker/float16/latest/face_landmarker.task",
-        delegate: "CPU"
+        delegate: fallbackDelegate
       },
       runningMode: "VIDEO",
       numFaces: 1
@@ -282,7 +292,11 @@ window.onload = async function () {
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
+    const videoConstraints = {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      facingMode: { ideal: "user" }
+    };
     if (deviceId) videoConstraints.deviceId = { exact: deviceId };
 
     try {

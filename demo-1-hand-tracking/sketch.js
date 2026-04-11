@@ -61,8 +61,37 @@
 // CONSTANTS
 // =============================================================================
 
-// Toggle console logging. Set to true to see per-frame debug output.
-const debugMode = false;
+// Toggle console logging. Add ?debug=1 to the URL to surface live diagnostics
+// on devices where DevTools is unavailable.
+const queryParams = new URLSearchParams(window.location.search);
+const debugMode = queryParams.get("debug") === "1";
+
+// Phones and tablets are more likely to have flaky GPU delegate behaviour in
+// browser-based MediaPipe tasks, so default them to CPU unless overridden.
+const isMobileDevice = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+const requestedDelegate = (queryParams.get("delegate") || "").toLowerCase();
+const preferredDelegate = requestedDelegate === "gpu" || requestedDelegate === "cpu"
+  ? requestedDelegate.toUpperCase()
+  : (isMobileDevice ? "CPU" : "GPU");
+
+// Slightly lower thresholds make the demo more tolerant of soft focus and
+// noisy mobile front cameras. They can be overridden from the URL.
+const defaultConfidence = isMobileDevice ? 0.35 : 0.5;
+const minHandDetectionConfidence = Number.parseFloat(
+  queryParams.get("minDetect") || String(defaultConfidence)
+);
+const minHandPresenceConfidence = Number.parseFloat(
+  queryParams.get("minPresence") || String(defaultConfidence)
+);
+const minTrackingConfidence = Number.parseFloat(
+  queryParams.get("minTrack") || String(defaultConfidence)
+);
+
+// Shared CDN paths for the MediaPipe Tasks runtime and hand model.
+const TASKS_VISION_CDN = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21";
+const HAND_MODEL_ASSET_PATH =
+  "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
+  "/hand_landmarker/float16/latest/hand_landmarker.task";
 
 // Colour for landmark dots (green).
 const LANDMARK_COLOR = "#4ade80";
@@ -136,6 +165,51 @@ window.onload = async function () {
   statusBanner.style.display = "none";
   statusHost.appendChild(statusBanner);
 
+  const debugPanel = document.createElement("pre");
+  debugPanel.style.position = statusHost === document.body ? "fixed" : "absolute";
+  debugPanel.style.right = "12px";
+  debugPanel.style.top = "12px";
+  debugPanel.style.zIndex = "9998";
+  debugPanel.style.margin = "0";
+  debugPanel.style.padding = "10px 12px";
+  debugPanel.style.borderRadius = "8px";
+  debugPanel.style.background = "rgba(17, 24, 39, 0.84)";
+  debugPanel.style.border = "1px solid rgba(74, 222, 128, 0.55)";
+  debugPanel.style.color = "#d1fae5";
+  debugPanel.style.font = "11px/1.4 monospace";
+  debugPanel.style.maxWidth = "min(86vw, 320px)";
+  debugPanel.style.whiteSpace = "pre-wrap";
+  debugPanel.style.pointerEvents = "none";
+  debugPanel.style.display = debugMode ? "block" : "none";
+  statusHost.appendChild(debugPanel);
+
+  let lastErrorMessage = "none";
+  let currentDelegate = "GPU";
+  let framesProcessed = 0;
+  let lastDetectionCount = 0;
+  let inferenceRecoveryAttempted = false;
+  let inferenceRecoveryInProgress = false;
+  let handResults = [];
+  let lastTimestamp = -1;
+  let currentStream = null;
+  let frameLoopActive = false;
+  let handLandmarker;
+  let HandLandmarker;
+  let FilesetResolver;
+  let vision;
+
+  function clampConfidence(value) {
+    if (Number.isNaN(value)) return defaultConfidence;
+    return Math.min(1, Math.max(0, value));
+  }
+
+  function formatError(err) {
+    if (!err) return "Unknown error";
+    if (typeof err === "string") return err;
+    if (err instanceof Error) return err.message;
+    return JSON.stringify(err);
+  }
+
   function showStatus(message, isError = false) {
     statusBanner.textContent = message;
     statusBanner.style.display = "block";
@@ -148,75 +222,97 @@ window.onload = async function () {
     statusBanner.style.display = "none";
   }
 
-  showStatus("Loading MediaPipe runtime...");
+  function updateDebugPanel(extraLines = []) {
+    if (!debugMode) return;
 
-  // ── MediaPipe Tasks Vision ───────────────────────────────────────────────
-  // The tasks-vision library is loaded via dynamic import — no extra <script>
-  // tag is needed in index.html. The .mjs bundle is an ES module that exposes
-  // HandLandmarker, FilesetResolver, and other Tasks API classes.
+    const streamTrack = currentStream ? currentStream.getVideoTracks()[0] : null;
+    const settings = streamTrack ? streamTrack.getSettings() : null;
+    const resolution = settings
+      ? `${settings.width || "?"}x${settings.height || "?"}`
+      : "no stream";
 
-  const { HandLandmarker, FilesetResolver } = await import(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs"
-  );
+    debugPanel.textContent = [
+      `mobile device: ${isMobileDevice}`,
+      `preferred delegate: ${preferredDelegate}`,
+      `delegate: ${currentDelegate}`,
+      `secure context: ${window.isSecureContext}`,
+      `min detect: ${clampConfidence(minHandDetectionConfidence).toFixed(2)}`,
+      `min presence: ${clampConfidence(minHandPresenceConfidence).toFixed(2)}`,
+      `min track: ${clampConfidence(minTrackingConfidence).toFixed(2)}`,
+      `video readyState: ${video.readyState}`,
+      `video size: ${video.videoWidth}x${video.videoHeight}`,
+      `stream size: ${resolution}`,
+      `frames processed: ${framesProcessed}`,
+      `hands in last frame: ${lastDetectionCount}`,
+      `last error: ${lastErrorMessage}`,
+      ...extraLines
+    ].join("\n");
+  }
 
-  // FilesetResolver downloads the WebAssembly runtime for Tasks Vision.
-  const vision = await FilesetResolver.forVisionTasks(
-    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm"
-  );
-
-  // ── MediaPipe HandLandmarker setup ───────────────────────────────────────
-  // createFromOptions replaces new Hands() + setOptions() from the legacy API.
-  // The .task file is the model binary — fetched from Google's CDN on first
-  // load, then cached by the browser. delegate: "GPU" uses WebGL acceleration;
-  // the catch block retries with CPU if GPU is unavailable.
-
-  let handLandmarker;
-  try {
-    showStatus("Loading hand model (GPU)...");
-    handLandmarker = await HandLandmarker.createFromOptions(vision, {
+  async function buildHandLandmarker(delegate) {
+    showStatus(`Loading hand model (${delegate})...`);
+    return HandLandmarker.createFromOptions(vision, {
       baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
-          "/hand_landmarker/float16/latest/hand_landmarker.task",
-        delegate: "GPU"
+        modelAssetPath: HAND_MODEL_ASSET_PATH,
+        delegate
       },
       runningMode: "VIDEO",
-      numHands: 2              // detect up to two hands at once
-    });
-  } catch (gpuErr) {
-    console.warn("GPU delegate unavailable, retrying with CPU:", gpuErr);
-    showStatus("Loading hand model (CPU fallback)...");
-    handLandmarker = await HandLandmarker.createFromOptions(vision, {
-      baseOptions: {
-        modelAssetPath:
-          "https://storage.googleapis.com/mediapipe-models/hand_landmarker" +
-          "/hand_landmarker/float16/latest/hand_landmarker.task",
-        delegate: "CPU"
-      },
-      runningMode: "VIDEO",
-      numHands: 2
+      numHands: 2,
+      minHandDetectionConfidence: clampConfidence(minHandDetectionConfidence),
+      minHandPresenceConfidence: clampConfidence(minHandPresenceConfidence),
+      minTrackingConfidence: clampConfidence(minTrackingConfidence)
     });
   }
 
-  if (debugMode) {
-    console.log("HandLandmarker ready.");
+  async function createHandLandmarkerWithFallback() {
+    const fallbackDelegate = preferredDelegate === "GPU" ? "CPU" : "GPU";
+
+    try {
+      handLandmarker = await buildHandLandmarker(preferredDelegate);
+      currentDelegate = preferredDelegate;
+    } catch (delegateErr) {
+      console.warn(`${preferredDelegate} delegate unavailable, retrying with ${fallbackDelegate}:`, delegateErr);
+      lastErrorMessage = `${preferredDelegate} init failed: ${formatError(delegateErr)}`;
+      updateDebugPanel();
+      handLandmarker = await buildHandLandmarker(fallbackDelegate);
+      currentDelegate = fallbackDelegate;
+    }
   }
 
-  // Store the most recent detection results so the render loop can read them.
-  // result.landmarks is an array of hands; each hand is an array of 21 { x, y, z }.
-  let handResults = [];
+  async function recoverFromInferenceError(err) {
+    const message = formatError(err);
+    lastErrorMessage = message;
+    updateDebugPanel(["recovery: attempting CPU fallback"]);
 
-  // detectForVideo requires a monotonically increasing timestamp (ms).
-  // Track the last value so we never pass the same timestamp twice.
-  let lastTimestamp = -1;
+    if (currentDelegate !== "GPU" || inferenceRecoveryAttempted) {
+      showStatus(`Tracking stopped: ${message}`, true);
+      return;
+    }
 
-  // ── Camera management ────────────────────────────────────────────────────
+    inferenceRecoveryAttempted = true;
+    frameLoopActive = false;
+    showStatus("GPU inference failed. Retrying with CPU...", true);
 
-  // Holds the active MediaStream so we can stop it when switching cameras.
-  let currentStream = null;
+    try {
+      handLandmarker = await buildHandLandmarker("CPU");
+      currentDelegate = "CPU";
+      lastTimestamp = -1;
+      handResults = [];
+      lastDetectionCount = 0;
+      lastErrorMessage = `Recovered from GPU failure: ${message}`;
+      updateDebugPanel(["recovery: switched to CPU"]);
 
-  // Controls whether the frame loop is running.
-  let frameLoopActive = false;
+      frameLoopActive = true;
+      requestAnimationFrame(frameLoop);
+      requestAnimationFrame(renderLoop);
+      showStatus("CPU tracking active after GPU failure.");
+    } catch (cpuErr) {
+      const cpuMessage = formatError(cpuErr);
+      lastErrorMessage = `CPU recovery failed: ${cpuMessage}`;
+      updateDebugPanel(["recovery: CPU fallback failed"]);
+      showStatus(`Tracking stopped: ${cpuMessage}`, true);
+    }
+  }
 
   // Stop loops and release camera tracks when leaving the page.
   window.addEventListener("beforeunload", () => {
@@ -225,6 +321,34 @@ window.onload = async function () {
       currentStream.getTracks().forEach(t => t.stop());
     }
   });
+
+  try {
+    showStatus("Loading MediaPipe runtime...");
+
+    // ── MediaPipe Tasks Vision ─────────────────────────────────────────────
+    // The tasks-vision library is loaded via dynamic import — no extra <script>
+    // tag is needed in index.html. The .mjs bundle is an ES module that exposes
+    // HandLandmarker, FilesetResolver, and other Tasks API classes.
+
+    ({ HandLandmarker, FilesetResolver } = await import(
+      `${TASKS_VISION_CDN}/vision_bundle.mjs`
+    ));
+
+    // FilesetResolver downloads the WebAssembly runtime for Tasks Vision.
+    vision = await FilesetResolver.forVisionTasks(`${TASKS_VISION_CDN}/wasm`);
+
+    // ── MediaPipe HandLandmarker setup ─────────────────────────────────────
+    // createFromOptions replaces new Hands() + setOptions() from the legacy API.
+    // The .task file is the model binary — fetched from Google's CDN on first
+    // load, then cached by the browser. delegate: "GPU" uses WebGL acceleration;
+    // the catch block retries with CPU if GPU is unavailable.
+
+    await createHandLandmarkerWithFallback();
+    updateDebugPanel();
+
+    if (debugMode) {
+      console.log("HandLandmarker ready.");
+    }
 
   /**
    * startCamera — opens the webcam with an optional specific device and
@@ -238,12 +362,23 @@ window.onload = async function () {
     frameLoopActive = false;
     showStatus("Requesting camera access...");
 
+    if (!navigator.mediaDevices?.getUserMedia) {
+      lastErrorMessage = "getUserMedia unavailable";
+      updateDebugPanel(["camera: API unavailable"]);
+      showStatus("Camera API unavailable. On phones this usually means the page is not HTTPS.", true);
+      return;
+    }
+
     if (currentStream) {
       currentStream.getTracks().forEach(t => t.stop());
       currentStream = null;
     }
 
-    const videoConstraints = { width: 640, height: 480 };
+    const videoConstraints = {
+      width: { ideal: 640 },
+      height: { ideal: 480 },
+      facingMode: { ideal: "user" }
+    };
     if (deviceId) videoConstraints.deviceId = { exact: deviceId };
 
     try {
@@ -252,7 +387,14 @@ window.onload = async function () {
       );
     } catch (err) {
       console.error("Could not open camera:", err);
-      showStatus("Camera access failed. Check permissions and reload.", true);
+      const message = formatError(err);
+      lastErrorMessage = message;
+      updateDebugPanel([`camera: ${message}`]);
+      if (!window.isSecureContext) {
+        showStatus("Camera blocked: mobile browsers require HTTPS for webcam access.", true);
+      } else {
+        showStatus(`Camera access failed: ${message}`, true);
+      }
       return;
     }
 
@@ -265,6 +407,7 @@ window.onload = async function () {
     video.onloadedmetadata = () => {
       canvas.width  = video.videoWidth;
       canvas.height = video.videoHeight;
+      updateDebugPanel();
       if (debugMode) {
         console.log(`Canvas set to ${canvas.width}×${canvas.height}`);
       }
@@ -284,6 +427,7 @@ window.onload = async function () {
     }
 
     showStatus("Camera running. Starting tracking...");
+    updateDebugPanel();
     frameLoopActive = true;
     requestAnimationFrame(frameLoop);
     requestAnimationFrame(renderLoop);
@@ -316,10 +460,25 @@ window.onload = async function () {
         if (debugMode) {
           console.log("Running HandLandmarker on current frame...");
         }
-        const result = handLandmarker.detectForVideo(video, ts);
-        handResults = result.landmarks ?? [];
-        if (debugMode) {
-          console.log(`Detected ${handResults.length} hand(s).`);
+        try {
+          const result = handLandmarker.detectForVideo(video, ts);
+          handResults = result.landmarks ?? [];
+          framesProcessed += 1;
+          lastDetectionCount = handResults.length;
+          updateDebugPanel();
+          if (debugMode) {
+            console.log(`Detected ${handResults.length} hand(s).`);
+          }
+        } catch (err) {
+          console.error("HandLandmarker.detectForVideo failed:", err);
+          frameLoopActive = false;
+          if (!inferenceRecoveryInProgress) {
+            inferenceRecoveryInProgress = true;
+            void recoverFromInferenceError(err).finally(() => {
+              inferenceRecoveryInProgress = false;
+            });
+          }
+          return;
         }
       }
     }
@@ -364,6 +523,7 @@ window.onload = async function () {
   const track    = currentStream ? currentStream.getVideoTracks()[0] : null;
   const activeId = track ? track.getSettings().deviceId : "";
   populateCameraSelect(activeId);
+  updateDebugPanel();
 
   // ── Drawing ──────────────────────────────────────────────────────────────
 
@@ -456,5 +616,13 @@ window.onload = async function () {
       10,
       h - 10
     );
+  }
+
+  } catch (err) {
+    const message = formatError(err);
+    lastErrorMessage = message;
+    console.error("Fatal startup error:", err);
+    updateDebugPanel(["startup: failed before tracking began"]);
+    showStatus(`Startup failed: ${message}`, true);
   }
 };
