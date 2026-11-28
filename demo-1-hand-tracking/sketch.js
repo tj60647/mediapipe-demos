@@ -100,7 +100,7 @@ const LANDMARK_COLOR = "#4ade80";
 const SKELETON_COLOR = "rgba(74, 222, 128, 0.5)";
 
 // Radius of each landmark dot in pixels.
-const DOT_RADIUS = 6;
+const DOT_RADIUS = 12;
 
 // =============================================================================
 // HAND CONNECTIONS
